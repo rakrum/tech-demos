@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>3D-kijker · model-viewer demo</title>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:960px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); }
+    .stage { position:relative; }
+    model-viewer { width:100%; height:min(70vh,560px); background:radial-gradient(circle at 50% 40%,#ffffff,#e9ecf5); --poster-color:transparent; }
+    .stage.drag model-viewer { outline:3px dashed var(--accent); outline-offset:-10px; }
+    .drop-hint { position:absolute; inset:0; display:none; align-items:center; justify-content:center; font-size:1.2rem; font-weight:600; color:var(--accent); background:rgba(79,107,255,.08); pointer-events:none; }
+    .stage.drag .drop-hint { display:flex; }
+    .ar-btn { position:absolute; right:12px; bottom:12px; border:0; border-radius:999px; padding:10px 16px; background:var(--accent); color:#fff; font-weight:600; font-size:.95rem; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+    .progress { position:absolute; left:0; top:0; height:4px; background:var(--accent); width:0; transition:width .2s; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 14px; border-top:1px solid var(--line); }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    input[type=file] { display:none; }
+    .info { color:var(--muted); font-size:.9rem; margin-left:auto; }
+    .status { padding:0 14px 12px; font-size:.9rem; color:var(--muted); min-height:1.2em; }
+    .status.err { color:#c0392b; }
+    .tip { margin-top:16px; padding:12px 14px; border-radius:12px; background:#eef1ff; border:1px solid #d9dfff; font-size:.95rem; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🧊 3D-kijker</h1>
+  <p class="sub">Draai, zoom en bekijk 3D-modellen in je browser, of zet ze met AR in je kamer.</p>
+
+  <div class="card">
+    <div class="stage" id="stage">
+      <model-viewer id="mv"
+        src="Astronaut.glb" ios-src="Astronaut.usdz"
+        alt="Een 3D-model van een astronaut"
+        camera-controls auto-rotate touch-action="pan-y"
+        shadow-intensity="1" exposure="1"
+        ar ar-modes="webxr scene-viewer quick-look" ar-scale="auto">
+        <button slot="ar-button" class="ar-btn">📱 Bekijk in je kamer (AR)</button>
+        <div slot="progress-bar" class="progress" id="progress"></div>
+      </model-viewer>
+      <div class="drop-hint">Laat je .glb- of .gltf-bestand hier los</div>
+    </div>
+    <div class="bar">
+      <label class="btn primary" for="file">📂 Kies je eigen model</label>
+      <input type="file" id="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
+      <button class="btn" id="rotate">⏸️ Stop draaien</button>
+      <button class="btn" id="reset">🎯 Camera terug</button>
+      <button class="btn" id="sample">🧑‍🚀 Voorbeeld</button>
+      <span class="info" id="dims"></span>
+    </div>
+    <div class="status" id="status">Sleep een .glb- of .gltf-bestand op het model, of kies er een met de knop.</div>
+  </div>
+
+  <div class="tip">🖨️ <strong>Tip voor je printflow:</strong> exporteer je model uit Tripo3D als <strong>.glb</strong>, sleep het hierin en bekijk het van alle kanten (en op ware grootte in AR) voordat je het naar de slicer voor je Snapmaker U1 stuurt.</div>
+
+  <ul class="help">
+    <li><strong>Muis:</strong> slepen = draaien, scrollen = zoomen, rechtermuisknop = verschuiven.</li>
+    <li><strong>Telefoon:</strong> één vinger = draaien, knijpen = zoomen. De AR-knop verschijnt alleen op telefoons die AR ondersteunen.</li>
+    <li>Je bestand blijft op je eigen apparaat: er wordt niets geüpload.</li>
+    <li>Een <code>.gltf</code> met losse texturen of <code>.bin</code>-bestanden werkt niet als los bestand; gebruik dan <code>.glb</code>.</li>
+  </ul>
+
+  <footer>Gemaakt met <a href="https://modelviewer.dev/" target="_blank" rel="noopener">model-viewer</a> van Google. Voorbeeldmodel "Astronaut" uit de model-viewer-voorbeelden (Poly by Google, CC-BY).</footer>
+</main>
+
+<script>
+  const mv = document.getElementById('mv');
+  const stage = document.getElementById('stage');
+  const statusEl = document.getElementById('status');
+  const dimsEl = document.getElementById('dims');
+  const fileInput = document.getElementById('file');
+  const rotateBtn = document.getElementById('rotate');
+  let currentUrl = null;
+
+  function setStatus(msg, err = false) { statusEl.textContent = msg; statusEl.classList.toggle('err', err); }
+
+  function loadFile(file) {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.glb') && !name.endsWith('.gltf')) {
+      setStatus('Dit bestandstype ken ik niet. Kies een .glb- of .gltf-bestand.', true);
+      return;
+    }
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    currentUrl = URL.createObjectURL(file);
+    mv.removeAttribute('ios-src');
+    mv.src = currentUrl;
+    mv.alt = 'Jouw 3D-model: ' + file.name;
+    setStatus('Bezig met laden: ' + file.name + ' …');
+  }
+
+  fileInput.addEventListener('change', e => { loadFile(e.target.files[0]); fileInput.value = ''; });
+
+  ['dragenter','dragover'].forEach(t => stage.addEventListener(t, e => { e.preventDefault(); stage.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(t => stage.addEventListener(t, e => { e.preventDefault(); if (t === 'dragleave' && stage.contains(e.relatedTarget)) return; stage.classList.remove('drag'); }));
+  stage.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  mv.addEventListener('progress', e => {
+    const p = e.detail.totalProgress;
+    const bar = document.getElementById('progress');
+    bar.style.width = (p * 100) + '%';
+    bar.style.opacity = p >= 1 ? 0 : 1;
+  });
+
+  mv.addEventListener('load', () => {
+    const d = mv.getDimensions();
+    const f = v => (v * 100).toFixed(1);
+    dimsEl.textContent = `Afmetingen: ${f(d.x)} × ${f(d.y)} × ${f(d.z)} cm`;
+    setStatus(mv.src.startsWith('blob:') ? 'Klaar! Je eigen model staat erin. Sleep gerust een volgend bestand.' : 'Voorbeeldmodel geladen. Sleep je eigen .glb hierop om het te bekijken.');
+  });
+
+  mv.addEventListener('error', () => setStatus('Dit model kon niet geladen worden. Is het een geldig .glb-bestand?', true));
+
+  rotateBtn.addEventListener('click', () => {
+    mv.autoRotate = !mv.autoRotate;
+    rotateBtn.textContent = mv.autoRotate ? '⏸️ Stop draaien' : '▶️ Laat draaien';
+  });
+  document.getElementById('reset').addEventListener('click', () => {
+    mv.cameraOrbit = 'auto auto auto'; mv.cameraTarget = 'auto auto auto'; mv.fieldOfView = 'auto'; mv.jumpCameraToGoal();
+  });
+  document.getElementById('sample').addEventListener('click', () => {
+    if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+    mv.setAttribute('ios-src', 'Astronaut.usdz');
+    mv.src = 'Astronaut.glb';
+    mv.alt = 'Een 3D-model van een astronaut';
+  });
+</script>
+</body>
+</html>
