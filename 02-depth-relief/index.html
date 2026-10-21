@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Foto naar 3D-reliëf · Depth Anything demo</title>
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  } }
+  </script>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1060px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 14px; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    input[type=file] { display:none; }
+    .drop { margin:0 14px 14px; border:2px dashed var(--line); border-radius:12px; padding:18px; text-align:center; color:var(--muted); }
+    .drop.drag { border-color:var(--accent); background:rgba(79,107,255,.06); color:var(--accent); }
+    .status { padding:0 14px 12px; font-size:.92rem; color:var(--muted); min-height:1.2em; }
+    .status.err { color:#c0392b; }
+    .progress { height:6px; margin:0 14px 12px; background:#eceffa; border-radius:99px; overflow:hidden; display:none; }
+    .progress > div { height:100%; width:0; background:var(--accent); transition:width .2s; }
+    .pair { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px; }
+    .pair figure { margin:0; }
+    .pair figcaption { font-size:.85rem; color:var(--muted); margin-bottom:6px; }
+    .pair img, .pair canvas { width:100%; height:260px; object-fit:contain; background:#eef0f6; border-radius:10px; display:block; }
+    .viewer-wrap { display:grid; grid-template-columns:minmax(0,1fr) 280px; }
+    #viewer { height:min(65vh,520px); background:radial-gradient(circle at 50% 40%,#ffffff,#e4e8f3); position:relative; }
+    #viewer canvas { display:block; }
+    .controls { padding:14px; border-left:1px solid var(--line); display:flex; flex-direction:column; gap:12px; font-size:.92rem; }
+    .controls label { display:flex; flex-direction:column; gap:4px; }
+    .controls .row { display:flex; justify-content:space-between; }
+    .controls .val { color:var(--accent); font-weight:600; }
+    .controls .check { flex-direction:row; align-items:center; gap:8px; }
+    .controls select { padding:6px; border-radius:8px; border:1px solid var(--line); font-size:.92rem; }
+    .meta { color:var(--muted); font-size:.85rem; }
+    .tip { padding:12px 14px; border-radius:12px; background:#eef1ff; border:1px solid #d9dfff; font-size:.95rem; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+    @media (max-width:760px) {
+      .pair { grid-template-columns:1fr; }
+      .viewer-wrap { grid-template-columns:1fr; }
+      .controls { border-left:0; border-top:1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🗿 Foto naar 3D-reliëf</h1>
+  <p class="sub">Een AI-model schat bij je foto wat dichtbij en wat ver weg is. Daar maken we een 3D-reliëf van dat je kunt draaien en als STL kunt printen.</p>
+
+  <div class="card">
+    <h2>1. Kies een foto</h2>
+    <div class="bar">
+      <button class="btn primary" id="pick">📷 Kies een foto</button>
+      <button class="btn" id="sample">🏛️ Probeer het voorbeeld</button>
+      <input type="file" id="file" accept="image/*">
+      <span class="meta" id="device"></span>
+    </div>
+    <div class="drop" id="drop">…of sleep een foto hierheen. Je foto blijft op je eigen computer; er wordt niets geüpload.</div>
+    <div class="progress" id="progress"><div></div></div>
+    <div class="status" id="status">Klaar om te beginnen.</div>
+    <div class="pair">
+      <figure><figcaption>Jouw foto</figcaption><img id="photo" alt="Gekozen foto"></figure>
+      <figure><figcaption>Dieptekaart (licht = dichtbij, donker = ver weg)</figcaption><canvas id="depth"></canvas></figure>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Je 3D-reliëf</h2>
+    <div class="viewer-wrap">
+      <div id="viewer"></div>
+      <div class="controls">
+        <label>Bron
+          <select id="source">
+            <option value="depth">Dieptekaart (AI)</option>
+            <option value="luma">Helderheid van de foto (klassieke lithofaan)</option>
+          </select>
+        </label>
+        <label><span class="row">Hoogte reliëf <span class="val" id="heightV"></span></span><input type="range" id="height" min="0.5" max="20" step="0.5" value="8"></label>
+        <label><span class="row">Breedte <span class="val" id="widthV"></span></span><input type="range" id="width" min="30" max="250" step="5" value="100"></label>
+        <label><span class="row">Dikte bodem <span class="val" id="baseV"></span></span><input type="range" id="base" min="0.4" max="10" step="0.2" value="2"></label>
+        <label><span class="row">Detail (rasterpunten) <span class="val" id="resV"></span></span><input type="range" id="res" min="100" max="300" step="10" value="160"></label>
+        <label><span class="row">Gladheid <span class="val" id="smoothV"></span></span><input type="range" id="smooth" min="0" max="4" step="0.5" value="1"></label>
+        <label class="check"><input type="checkbox" id="invert"> Omdraaien (voor lithofaan: licht = dun)</label>
+        <div class="meta" id="dims">Nog geen reliëf.</div>
+        <button class="btn primary" id="download" disabled>⬇️ Download STL</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip">💡 <b>Lithofaan voor je Snapmaker U1:</b> kies "Helderheid van de foto" (of de dieptekaart), zet <b>Omdraaien</b> aan, bodem ±0,8 mm en hoogte ±2,2 mm (samen ±0,8–3 mm). Print in wit PLA, 100% infill, en houd hem voor een lamp.</div>
+
+  <ul class="help">
+    <li>De eerste keer laadt je browser het AI-model (±25–100 MB, afhankelijk van je browser). Daarna staat het in de cache.</li>
+    <li>Werkt het best in Chrome of Edge (met WebGPU). Andere browsers gebruiken een tragere maar prima reserve-modus.</li>
+    <li>De diepte wordt <i>geschat</i>, niet gemeten. Portretten, beelden en voorwerpen met een rustige achtergrond werken het best.</li>
+  </ul>
+
+  <footer>
+    Model: <a href="https://huggingface.co/onnx-community/depth-anything-v2-small">Depth Anything V2 Small</a> (Apache-2.0), draait lokaal via <a href="https://github.com/huggingface/transformers.js">Transformers.js</a>. 3D: <a href="https://threejs.org/">three.js</a>.
+    Voorbeeldfoto: <a href="https://commons.wikimedia.org/wiki/File:Bust_of_Julius_Caesar.jpg">Bust of Julius Caesar</a> door Wilfredor, CC0 (Wikimedia Commons).
+  </footer>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1';
+const MODEL = 'onnx-community/depth-anything-v2-small';
+const $ = (id) => document.getElementById(id);
+const statusEl = $('status'), progEl = $('progress'), progBar = progEl.firstElementChild;
+
+function setStatus(msg, err = false) { statusEl.textContent = msg; statusEl.classList.toggle('err', err); }
+function setProgress(p) {
+  if (p == null) { progEl.style.display = 'none'; return; }
+  progEl.style.display = 'block'; progBar.style.width = Math.round(p * 100) + '%';
+}
+
+// ---------- AI model ----------
+let depthPipe = null, pipePromise = null;
+async function hasWebGPU() {
+  try { return !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch { return false; }
+}
+function loadModel() {
+  if (pipePromise) return pipePromise;
+  pipePromise = (async () => {
+    const { pipeline } = await import(TF_URL);
+    const files = {};
+    const progress_callback = (e) => {
+      if (e.status === 'progress' && e.file) {
+        files[e.file] = { loaded: e.loaded || 0, total: e.total || 0 };
+        let l = 0, t = 0;
+        for (const f of Object.values(files)) { l += f.loaded; t += f.total; }
+        if (t > 0) {
+          setProgress(l / t);
+          setStatus(`AI-model downloaden (eenmalig): ${(l / 1e6).toFixed(0)} van ${(t / 1e6).toFixed(0)} MB…`);
+        }
+      }
+    };
+    const tries = [];
+    if (await hasWebGPU()) tries.push({ device: 'webgpu', dtype: 'fp16', label: 'WebGPU (snel)' }, { device: 'webgpu', dtype: 'fp32', label: 'WebGPU (snel)' });
+    tries.push({ device: 'wasm', dtype: 'q8', label: 'reserve-modus (WASM)' });
+    let lastErr;
+    for (const t of tries) {
+      try {
+        setStatus('AI-model laden…');
+        const p = await pipeline('depth-estimation', MODEL, { device: t.device, dtype: t.dtype, progress_callback });
+        $('device').textContent = 'AI draait via ' + t.label;
+        setProgress(null);
+        return (depthPipe = p);
+      } catch (e) { console.warn('Model laden mislukt met', t, e); lastErr = e; }
+    }
+    pipePromise = null;
+    throw lastErr;
+  })();
+  return pipePromise;
+}
+
+// ---------- image handling ----------
+let photoCanvas = null;   // downscaled original photo
+let depthCanvas = null;   // grayscale depth map, same size as photoCanvas
+let busy = false;
+
+function loadImage(url) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Kon de afbeelding niet openen.')); im.src = url; });
+}
+
+async function processImage(url, isObjectUrl) {
+  if (busy) return;
+  busy = true; $('pick').disabled = $('sample').disabled = true;
+  try {
+    const im = await loadImage(url);
+    const maxSide = 1024, s = Math.min(1, maxSide / Math.max(im.naturalWidth, im.naturalHeight));
+    photoCanvas = document.createElement('canvas');
+    photoCanvas.width = Math.round(im.naturalWidth * s); photoCanvas.height = Math.round(im.naturalHeight * s);
+    photoCanvas.getContext('2d').drawImage(im, 0, 0, photoCanvas.width, photoCanvas.height);
+    $('photo').src = photoCanvas.toDataURL('image/jpeg', 0.9);
+    if (isObjectUrl) URL.revokeObjectURL(url);
+
+    const pipe = await loadModel();
+    setStatus('Diepte inschatten…'); setProgress(null);
+    const t0 = performance.now();
+    const blob = await new Promise((r) => photoCanvas.toBlob(r, 'image/png'));
+    const blobUrl = URL.createObjectURL(blob);
+    const out = await pipe(blobUrl);
+    URL.revokeObjectURL(blobUrl);
+    const result = Array.isArray(out) ? out[0] : out;
+    depthCanvas = depthToCanvas(result.depth, photoCanvas.width, photoCanvas.height);
+    const dc = $('depth'); dc.width = depthCanvas.width; dc.height = depthCanvas.height;
+    dc.getContext('2d').drawImage(depthCanvas, 0, 0);
+    setStatus(`Klaar in ${((performance.now() - t0) / 1000).toFixed(1)} s. Draai het reliëf met je muis en download de STL.`);
+    rebuild();
+  } catch (e) {
+    console.error(e);
+    setProgress(null);
+    setStatus('Er ging iets mis: ' + (e?.message || e) + ' Probeer het opnieuw of gebruik Chrome/Edge.', true);
+  } finally {
+    busy = false; $('pick').disabled = $('sample').disabled = false;
+  }
+}
+
+// RawImage (1 channel) -> normalised grayscale canvas of size w x h
+function depthToCanvas(raw, w, h) {
+  const src = raw.data, ch = raw.channels || 1, n = raw.width * raw.height;
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < n; i++) { const v = src[i * ch]; if (v < mn) mn = v; if (v > mx) mx = v; }
+  const range = mx - mn || 1;
+  const c = document.createElement('canvas'); c.width = raw.width; c.height = raw.height;
+  const ctx = c.getContext('2d'), id = ctx.createImageData(raw.width, raw.height);
+  for (let i = 0; i < n; i++) {
+    const g = Math.round(((src[i * ch] - mn) / range) * 255);
+    id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = g; id.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+  if (raw.width === w && raw.height === h) return c;
+  const o = document.createElement('canvas'); o.width = w; o.height = h;
+  o.getContext('2d').drawImage(c, 0, 0, w, h);
+  return o;
+}
+
+// ---------- height field + solid mesh ----------
+function settings() {
+  return {
+    height: +$('height').value, width: +$('width').value, base: +$('base').value,
+    res: +$('res').value, smooth: +$('smooth').value, invert: $('invert').checked, source: $('source').value,
+  };
+}
+
+function sampleHeights(cfg) {
+  const src = cfg.source === 'luma' ? photoCanvas : depthCanvas;
+  const cols = cfg.res, rows = Math.max(2, Math.round(cfg.res * src.height / src.width));
+  const c = document.createElement('canvas'); c.width = cols; c.height = rows;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  // blur is in grid pixels, scaled to source pixels
+  if (cfg.smooth > 0) ctx.filter = `blur(${cfg.smooth * src.width / cols}px)`;
+  ctx.drawImage(src, 0, 0, cols, rows);
+  const d = ctx.getImageData(0, 0, cols, rows).data;
+  const hts = new Float32Array(cols * rows);
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < cols * rows; i++) {
+    const v = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+    hts[i] = v; if (v < mn) mn = v; if (v > mx) mx = v;
+  }
+  const range = mx - mn || 1;
+  for (let i = 0; i < hts.length; i++) {
+    let t = (hts[i] - mn) / range;          // 0..1, 1 = light (near / bright)
+    if (cfg.invert) t = 1 - t;
+    hts[i] = cfg.base + t * cfg.height;
+  }
+  return { cols, rows, hts };
+}
+
+// Closed solid: top height field, side walls, flat bottom (fan from centre). Units: mm.
+function buildSolid(cfg) {
+  const { cols, rows, hts } = sampleHeights(cfg);
+  const W = cfg.width, H = W * (rows - 1) / (cols - 1);
+  const nTop = cols * rows;
+  // boundary loop, counter-clockwise seen from above (+z)
+  const loop = [];
+  for (let i = 0; i < cols; i++) loop.push(i + (rows - 1) * cols);          // bottom edge, left->right
+  for (let j = rows - 2; j >= 0; j--) loop.push(cols - 1 + j * cols);       // right edge, up
+  for (let i = cols - 2; i >= 0; i--) loop.push(i);                        // top edge, right->left
+  for (let j = 1; j < rows - 1; j++) loop.push(j * cols);                  // left edge, down
+  const nB = loop.length;
+  const pos = new Float32Array((nTop + nB + 1) * 3);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const k = (j * cols + i) * 3;
+    pos[k] = (i / (cols - 1)) * W - W / 2;
+    pos[k + 1] = ((rows - 1 - j) / (rows - 1)) * H - H / 2;
+    pos[k + 2] = hts[j * cols + i];
+  }
+  for (let b = 0; b < nB; b++) {                                           // bottom copies of boundary
+    const s = loop[b] * 3, k = (nTop + b) * 3;
+    pos[k] = pos[s]; pos[k + 1] = pos[s + 1]; pos[k + 2] = 0;
+  }
+  const C = nTop + nB; pos[C * 3] = 0; pos[C * 3 + 1] = 0; pos[C * 3 + 2] = 0;
+
+  const nTri = 2 * (cols - 1) * (rows - 1) + 2 * nB + nB;
+  const idx = new Uint32Array(nTri * 3); let t = 0;
+  const tri = (a, b, c) => { idx[t++] = a; idx[t++] = b; idx[t++] = c; };
+  for (let j = 0; j < rows - 1; j++) for (let i = 0; i < cols - 1; i++) {
+    const v00 = j * cols + i, v10 = v00 + 1, v01 = v00 + cols, v11 = v01 + 1;
+    tri(v01, v11, v10); tri(v01, v10, v00);
+  }
+  for (let b = 0; b < nB; b++) {
+    const b2 = (b + 1) % nB;
+    const Pt = loop[b], Qt = loop[b2], Pb = nTop + b, Qb = nTop + b2;
+    tri(Pb, Qb, Qt); tri(Pb, Qt, Pt);   // wall
+    tri(C, Qb, Pb);                     // bottom (normal down)
+  }
+  return { pos, idx, W, H, cols, rows, nTri };
+}
+
+function toBinarySTL(solid) {
+  const { pos, idx, nTri } = solid;
+  const buf = new ArrayBuffer(84 + nTri * 50), dv = new DataView(buf);
+  const header = 'Depth relief - tech-demos 02-depth-relief - units: mm';
+  for (let i = 0; i < 80; i++) dv.setUint8(i, i < header.length ? header.charCodeAt(i) : 32);
+  dv.setUint32(80, nTri, true);
+  let o = 84;
+  for (let t = 0; t < nTri; t++) {
+    const a = idx[t * 3] * 3, b = idx[t * 3 + 1] * 3, c = idx[t * 3 + 2] * 3;
+    // shift so the model sits in positive coordinates (x,y >= 0)
+    const ax = pos[a] + solid.W / 2, ay = pos[a + 1] + solid.H / 2, az = pos[a + 2];
+    const bx = pos[b] + solid.W / 2, by = pos[b + 1] + solid.H / 2, bz = pos[b + 2];
+    const cx = pos[c] + solid.W / 2, cy = pos[c + 1] + solid.H / 2, cz = pos[c + 2];
+    const ux = bx - ax, uy = by - ay, uz = bz - az, vx = cx - ax, vy = cy - ay, vz = cz - az;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    for (const v of [nx, ny, nz, ax, ay, az, bx, by, bz, cx, cy, cz]) { dv.setFloat32(o, v, true); o += 4; }
+    dv.setUint16(o, 0, true); o += 2;
+  }
+  return buf;
+}
+
+// ---------- three.js viewer ----------
+const viewer = $('viewer');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+viewer.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 1, 5000);
+camera.up.set(0, 0, 1);
+camera.position.set(0, -170, 150);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8890a8, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.position.set(-140, 60, 70); scene.add(sun);
+const material = new THREE.MeshStandardMaterial({ color: 0xe9e4da, roughness: 0.75, metalness: 0 });
+let mesh = null, lastSolid = null;
+
+function resize() {
+  const w = viewer.clientWidth, h = viewer.clientHeight;
+  renderer.setSize(w, h, false); renderer.domElement.style.width = w + 'px'; renderer.domElement.style.height = h + 'px';
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(viewer); resize();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+
+let firstBuild = true;
+function rebuild() {
+  updateLabels();
+  if (!depthCanvas) return;
+  const cfg = settings();
+  const solid = buildSolid(cfg);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(solid.pos, 3));
+  g.setIndex(new THREE.BufferAttribute(solid.idx, 1));
+  g.computeVertexNormals();
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+  mesh = new THREE.Mesh(g, material); scene.add(mesh);
+  lastSolid = solid;
+  if (firstBuild) {
+    const r = Math.max(solid.W, solid.H);
+    camera.position.set(0, -r * 1.1, r * 1.1); controls.target.set(0, 0, cfg.base); controls.update();
+    firstBuild = false;
+  }
+  const mb = (84 + solid.nTri * 50) / 1e6;
+  $('dims').textContent = `${solid.W.toFixed(0)} × ${solid.H.toFixed(0)} × ${(cfg.base + cfg.height).toFixed(1)} mm · ${solid.nTri.toLocaleString('nl-NL')} driehoeken · STL ±${mb.toFixed(1)} MB`;
+  $('download').disabled = false;
+  window.__relief = { nTri: solid.nTri, W: solid.W, H: solid.H };
+}
+
+function updateLabels() {
+  const f = (v) => String(v).replace('.', ',');
+  $('heightV').textContent = f($('height').value) + ' mm';
+  $('widthV').textContent = $('width').value + ' mm';
+  $('baseV').textContent = f($('base').value) + ' mm';
+  $('resV').textContent = $('res').value + ' px';
+  $('smoothV').textContent = f($('smooth').value);
+}
+
+let rebuildTimer = 0;
+for (const id of ['height', 'width', 'base', 'res', 'smooth', 'invert', 'source']) {
+  $(id).addEventListener('input', () => { updateLabels(); clearTimeout(rebuildTimer); rebuildTimer = setTimeout(rebuild, 60); });
+}
+updateLabels();
+
+$('download').addEventListener('click', () => {
+  if (!lastSolid) return;
+  const blob = new Blob([toBinarySTL(lastSolid)], { type: 'model/stl' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `reliëf-${lastSolid.W.toFixed(0)}mm${$('invert').checked ? '-lithofaan' : ''}.stl`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+// ---------- inputs ----------
+$('pick').onclick = () => $('file').click();
+$('file').onchange = (e) => { const f = e.target.files[0]; if (f) processImage(URL.createObjectURL(f), true); e.target.value = ''; };
+$('sample').onclick = () => processImage('caesar.jpg', false);
+const drop = $('drop');
+for (const el of [drop, document.body]) {
+  el.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+  el.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  el.addEventListener('drop', (e) => {
+    e.preventDefault(); drop.classList.remove('drag');
+    const f = [...(e.dataTransfer?.files || [])].find((x) => x.type.startsWith('image/'));
+    if (f) processImage(URL.createObjectURL(f), true); else setStatus('Dat lijkt geen foto. Probeer een .jpg of .png.', true);
+  });
+}
+</script>
+</body>
+</html>
