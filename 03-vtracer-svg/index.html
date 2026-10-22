@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Afbeelding naar SVG · VTracer demo</title>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1180px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 14px; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn.small { padding:4px 9px; font-size:.85rem; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    input[type=file] { display:none; }
+    .drop { margin:0 14px 14px; border:2px dashed var(--line); border-radius:12px; padding:18px; text-align:center; color:var(--muted); }
+    .drop.drag { border-color:var(--accent); background:rgba(79,107,255,.06); color:var(--accent); }
+    .status { padding:0 14px 12px; font-size:.92rem; color:var(--muted); min-height:1.2em; }
+    .status.err { color:#c0392b; }
+    .work { display:grid; grid-template-columns:minmax(0,1fr) 290px; }
+    .panes { padding:14px; }
+    .pair { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .pair figure { margin:0; min-width:0; }
+    .pair figcaption { font-size:.85rem; color:var(--muted); margin-bottom:6px; display:flex; justify-content:space-between; }
+    .view { height:min(60vh,480px); overflow:auto; border-radius:10px; border:1px solid var(--line);
+            background-color:#fff; background-image:linear-gradient(45deg,#eef0f6 25%,transparent 25%),linear-gradient(-45deg,#eef0f6 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eef0f6 75%),linear-gradient(-45deg,transparent 75%,#eef0f6 75%);
+            background-size:20px 20px; background-position:0 0,0 10px,10px -10px,-10px 0; }
+    .stage { width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+    .stage img, .stage svg { max-width:100%; max-height:100%; display:block; }
+    .zoomed .stage { display:block; height:auto; }
+    .zoomed .stage img, .zoomed .stage svg { max-width:none; max-height:none; width:100%; height:auto; }
+    .zoombar { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:.88rem; color:var(--muted); flex-wrap:wrap; }
+    .controls { padding:14px; border-left:1px solid var(--line); display:flex; flex-direction:column; gap:11px; font-size:.92rem; }
+    .controls label { display:flex; flex-direction:column; gap:3px; }
+    .controls .row { display:flex; justify-content:space-between; }
+    .controls .val { color:var(--accent); font-weight:600; }
+    .controls .hint { color:var(--muted); font-size:.78rem; }
+    .controls .check { flex-direction:row; align-items:center; gap:8px; }
+    .seg { display:flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+    .seg button { flex:1; border:0; background:#fff; padding:7px 4px; cursor:pointer; font-size:.88rem; color:var(--ink); }
+    .seg button + button { border-left:1px solid var(--line); }
+    .seg button.on { background:var(--accent); color:#fff; }
+    .controls select, .controls input[type=number] { padding:6px; border-radius:8px; border:1px solid var(--line); font-size:.92rem; }
+    .colorOnly.off, .bwOnly.off, .splineOnly.off { display:none; }
+    .stats { display:flex; flex-wrap:wrap; gap:8px; padding:0 14px 12px; }
+    .pill { background:#eef1ff; color:#2c3d99; border-radius:99px; padding:4px 10px; font-size:.85rem; }
+    .layers { padding:0 14px 14px; display:flex; flex-direction:column; gap:6px; }
+    .layer { display:flex; align-items:center; gap:10px; padding:6px 8px; border:1px solid var(--line); border-radius:10px; font-size:.9rem; }
+    .sw { width:26px; height:26px; border-radius:7px; border:1px solid rgba(0,0,0,.15); flex:none; }
+    .layer .name { flex:1; }
+    .layer .meta { color:var(--muted); font-size:.82rem; }
+    .meta { color:var(--muted); font-size:.85rem; }
+    .tip { margin:0 14px 14px; padding:12px 14px; border-radius:12px; background:#eef1ff; border:1px solid #d9dfff; font-size:.95rem; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+    @media (max-width:820px) {
+      .pair { grid-template-columns:1fr; }
+      .work { grid-template-columns:1fr; }
+      .controls { border-left:0; border-top:1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>✏️ Afbeelding naar SVG</h1>
+  <p class="sub">Zet een tekening, logo of foto om in een strak SVG-bestand met aparte kleurlagen. Handig voor graveren, snijden en UV-printen met je xTool.</p>
+
+  <div class="card">
+    <h2>1. Kies een afbeelding</h2>
+    <div class="bar">
+      <button class="btn primary" id="pick">🖼️ Kies een afbeelding</button>
+      <button class="btn" id="sample">🦜 Probeer het voorbeeld</button>
+      <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp">
+      <span class="meta" id="engine">VTracer wordt geladen…</span>
+    </div>
+    <div class="drop" id="drop">…of sleep een PNG of JPG hierheen. Je afbeelding blijft op je eigen computer; er wordt niets geüpload.</div>
+    <div class="status" id="status">Klaar om te beginnen.</div>
+  </div>
+
+  <div class="card">
+    <h2>2. Bekijk en stel bij</h2>
+    <div class="work">
+      <div class="panes">
+        <div class="pair" id="pair">
+          <figure><figcaption><span>Origineel</span><span id="origInfo"></span></figcaption>
+            <div class="view" id="viewA"><div class="stage" id="stageA"><img id="orig" alt="Gekozen afbeelding"></div></div></figure>
+          <figure><figcaption><span>SVG-resultaat</span><span id="svgInfo"></span></figcaption>
+            <div class="view" id="viewB"><div class="stage" id="stageB"></div></div></figure>
+        </div>
+        <div class="zoombar">
+          <span>Zoom:</span>
+          <button class="btn small" id="zoomOut" title="Uitzoomen">−</button>
+          <input type="range" id="zoom" min="100" max="800" step="25" value="100" aria-label="Zoom">
+          <button class="btn small" id="zoomIn" title="Inzoomen">+</button>
+          <button class="btn small" id="zoomFit">Passend</button>
+          <span id="zoomVal">100%</span>
+          <span>· beide kanten scrollen mee</span>
+        </div>
+      </div>
+      <div class="controls">
+        <label>Soort
+          <div class="seg" id="segColor"><button data-v="color" class="on">🎨 Kleur</button><button data-v="bw">⚫ Zwart-wit</button></div>
+        </label>
+        <label>Vorm van de lijnen
+          <div class="seg" id="segMode"><button data-v="spline" class="on">Vloeiend</button><button data-v="polygon">Hoekig</button><button data-v="pixel">Pixels</button></div>
+        </label>
+        <label class="bwOnly off"><span class="row">Zwart-wit drempel <span class="val" id="vThreshold"></span></span>
+          <input type="range" id="threshold" min="10" max="245" value="128">
+          <span class="hint">Hoger = meer wordt zwart.</span></label>
+        <label class="colorOnly"><span class="row">Max. aantal kleurlagen <span class="val" id="vMaxColors"></span></span>
+          <input type="range" id="maxColors" min="2" max="17" value="12">
+          <span class="hint">Zoveel kleuren (en dus lagen) houd je maximaal over. Helemaal rechts = onbeperkt.</span></label>
+        <label class="colorOnly"><span class="row">Kleurprecisie <span class="val" id="vColorPrecision"></span></span>
+          <input type="range" id="colorPrecision" min="1" max="8" value="6">
+          <span class="hint">Hoe fijn kleuren worden onderscheiden: lager = minder kleuren en vormen.</span></label>
+        <label class="colorOnly"><span class="row">Kleurverschil per laag <span class="val" id="vLayerDifference"></span></span>
+          <input type="range" id="layerDifference" min="1" max="128" value="16">
+          <span class="hint">Hoger = kleuren die op elkaar lijken worden samengevoegd.</span></label>
+        <label><span class="row">Ruis weghalen <span class="val" id="vFilterSpeckle"></span></span>
+          <input type="range" id="filterSpeckle" min="0" max="64" value="4">
+          <span class="hint">Vlekjes kleiner dan dit (in pixels) verdwijnen. Hoger = minder detail.</span></label>
+        <label class="splineOnly"><span class="row">Hoekdrempel <span class="val" id="vCornerThreshold"></span></span>
+          <input type="range" id="cornerThreshold" min="0" max="180" value="60">
+          <span class="hint">Lager = meer scherpe hoeken, hoger = ronder.</span></label>
+        <label class="splineOnly"><span class="row">Lengte lijnstukjes <span class="val" id="vLengthThreshold"></span></span>
+          <input type="range" id="lengthThreshold" min="3.5" max="10" step="0.5" value="4">
+          <span class="hint">Hoger = gladdere, eenvoudigere lijnen.</span></label>
+        <label><span class="row">Decimalen in de paden <span class="val" id="vPathPrecision"></span></span>
+          <input type="range" id="pathPrecision" min="0" max="6" value="2">
+          <span class="hint">Padprecisie: minder decimalen = kleiner bestand.</span></label>
+        <label class="check colorOnly"><input type="checkbox" id="cutout"> Lagen uitsnijden (geen overlap)</label>
+        <span class="hint colorOnly">Aan: elke kleur is een losse vorm zonder overlap, handig per laag snijden of UV-printen. Uit: lagen liggen gestapeld (kleiner bestand).</span>
+        <label>Werkformaat (langste kant)
+          <select id="maxSide"><option value="800">800 px (snel)</option><option value="1200" selected>1200 px</option><option value="2000">2000 px (meer detail)</option><option value="0">Origineel formaat</option></select></label>
+        <label>Breedte van de SVG in mm
+          <input type="number" id="widthMm" min="0" step="1" value="100">
+          <span class="hint">Voor xTool: de SVG krijgt deze breedte. Zet op 0 om pixels te houden.</span></label>
+        <button class="btn" id="reset">↺ Standaardinstellingen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3. Download</h2>
+    <div class="bar">
+      <button class="btn primary" id="dlSvg" disabled>⬇️ Download SVG</button>
+      <button class="btn" id="dlZip" disabled>🗂️ Alle kleurlagen los (zip)</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="layers" id="layers"></div>
+    <div class="tip">💡 <b>xTool-tip:</b> open de SVG in xTool Creative Space (Importeren). Kies <b>Zwart-wit</b> voor graveren of snijden; gebruik <b>Kleur</b> met losse lagen voor UV-print, of geef elke kleurlaag een eigen bewerking. De lichtste laag is vaak de achtergrond: die kun je weglaten.</div>
+  </div>
+
+  <ul class="help">
+    <li>Werkt het best met tekeningen, logo's en plaatjes met vlakke kleuren. Foto's geven heel veel paden en grote bestanden.</li>
+    <li>Te veel lagen? Zet <b>Max. aantal kleurlagen</b> lager, of <b>Kleurverschil per laag</b> hoger.</li>
+    <li>Rommelige randjes? Zet <b>Ruis weghalen</b> hoger.</li>
+  </ul>
+
+  <footer>
+    Gemaakt met <a href="https://github.com/visioncortex/vtracer" target="_blank" rel="noopener">VTracer</a> van visioncortex (MIT/Apache-2.0), als WebAssembly in je browser.
+    Voorbeeld: papegaai uit <a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener">Twemoji</a> (CC-BY 4.0). · <a href="../">Alle demo's</a>
+  </footer>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const statusEl = $('status');
+const setStatus = (t, err = false) => { statusEl.textContent = t; statusEl.classList.toggle('err', err); };
+
+// ---------- worker ----------
+const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+let jobId = 0, busy = false, pending = false, engineReady = false;
+worker.onmessage = (ev) => {
+  const m = ev.data;
+  if (m.type === 'ready') { engineReady = true; $('engine').textContent = '✅ VTracer staat klaar'; return; }
+  if (m.type === 'error') {
+    if (m.id === -1) { $('engine').textContent = '⚠️ VTracer kon niet laden'; setStatus('VTracer kon niet laden: ' + m.message, true); return; }
+    busy = false; setStatus('Er ging iets mis: ' + m.message, true); if (pending) run(); return;
+  }
+  if (m.type === 'result') {
+    busy = false;
+    if (m.id === jobId) showResult(m.svg, m.ms);
+    if (pending) run();
+  }
+};
+
+// ---------- image input ----------
+let source = null; // {name, img}
+let pixels = null; // {rgba, width, height}
+async function loadImage(url, name) {
+  setStatus('Afbeelding laden…');
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = url;
+  try { await img.decode(); } catch { setStatus('Deze afbeelding kan ik niet openen. Probeer een PNG of JPG.', true); return; }
+  source = { name, img };
+  $('orig').src = url;
+  $('origInfo').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`;
+  prepPixels();
+  schedule(0);
+}
+function prepPixels() {
+  if (!source) return;
+  const { img } = source;
+  const max = +$('maxSide').value;
+  let w = img.naturalWidth, h = img.naturalHeight;
+  if (max && Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  pixels = { rgba: ctx.getImageData(0, 0, w, h).data, width: w, height: h };
+}
+function useFile(f) {
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { setStatus('Dat is geen afbeelding. Kies een PNG of JPG.', true); return; }
+  loadImage(URL.createObjectURL(f), f.name.replace(/\.[^.]+$/, ''));
+}
+$('pick').onclick = () => $('file').click();
+$('file').onchange = (e) => useFile(e.target.files[0]);
+$('sample').onclick = () => loadImage('voorbeeld-papegaai.png', 'papegaai');
+const drop = $('drop');
+['dragenter', 'dragover'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave', 'drop'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === 'drop' || e.target === drop) drop.classList.remove('drag'); }));
+document.addEventListener('drop', (e) => useFile(e.dataTransfer.files[0]));
+
+// ---------- controls ----------
+const DEFAULTS = { color: 'color', mode: 'spline', threshold: 128, maxColors: 12, colorPrecision: 6, layerDifference: 16, filterSpeckle: 4,
+  cornerThreshold: 60, lengthThreshold: 4, pathPrecision: 2, cutout: false, maxSide: '1200', widthMm: 100 };
+const sliders = ['threshold', 'maxColors', 'colorPrecision', 'layerDifference', 'filterSpeckle', 'cornerThreshold', 'lengthThreshold', 'pathPrecision'];
+const units = { cornerThreshold: '°', filterSpeckle: ' px' };
+function seg(id) { return $(id).querySelector('.on').dataset.v; }
+function setSeg(id, v) { $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v)); }
+function refreshLabels() {
+  for (const s of sliders) $('v' + s[0].toUpperCase() + s.slice(1)).textContent = $(s).value + (units[s] || '');
+  if (+$('maxColors').value > 16) $('vMaxColors').textContent = 'onbeperkt';
+  const bw = seg('segColor') === 'bw';
+  document.querySelectorAll('.colorOnly').forEach((e) => e.classList.toggle('off', bw));
+  document.querySelectorAll('.bwOnly').forEach((e) => e.classList.toggle('off', !bw));
+  document.querySelectorAll('.splineOnly').forEach((e) => e.classList.toggle('off', seg('segMode') !== 'spline'));
+}
+function options() {
+  const bw = seg('segColor') === 'bw';
+  const o = {
+    clustering: bw ? 'bw' : 'color-cluster',
+    mode: seg('segMode'),
+    filterSpeckle: +$('filterSpeckle').value,
+    cornerThreshold: +$('cornerThreshold').value,
+    lengthThreshold: +$('lengthThreshold').value,
+    spliceThreshold: 45,
+    maxIterations: 10,
+    pathPrecision: +$('pathPrecision').value,
+  };
+  if (bw) o.binaryThreshold = +$('threshold').value;
+  else { o.colorPrecision = +$('colorPrecision').value; if (+$('maxColors').value <= 16) o.maxColors = +$('maxColors').value; o.layerDifference = +$('layerDifference').value; o.hierarchical = $('cutout').checked ? 'cutout' : 'stacked'; }
+  return o;
+}
+let timer = 0;
+function schedule(delay = 250) { clearTimeout(timer); timer = setTimeout(run, delay); }
+function run() {
+  if (!pixels) return;
+  if (busy) { pending = true; return; }
+  pending = false; busy = true; jobId++;
+  setStatus(engineReady ? 'Bezig met omzetten…' : 'VTracer laden en omzetten…');
+  const rgba = pixels.rgba.slice().buffer;
+  worker.postMessage({ id: jobId, rgba, width: pixels.width, height: pixels.height, options: options() }, [rgba]);
+}
+sliders.forEach((s) => $(s).addEventListener('input', () => { refreshLabels(); schedule(); }));
+['segColor', 'segMode'].forEach((id) => $(id).addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return; setSeg(id, b.dataset.v); refreshLabels(); schedule(0);
+}));
+$('cutout').onchange = () => schedule(0);
+$('maxSide').onchange = () => { prepPixels(); schedule(0); };
+$('widthMm').oninput = () => { if (result) renderOutputs(); };
+$('reset').onclick = () => {
+  setSeg('segColor', DEFAULTS.color); setSeg('segMode', DEFAULTS.mode);
+  for (const s of sliders) $(s).value = DEFAULTS[s];
+  $('cutout').checked = DEFAULTS.cutout; $('maxSide').value = DEFAULTS.maxSide; $('widthMm').value = DEFAULTS.widthMm;
+  refreshLabels(); prepPixels(); schedule(0);
+};
+refreshLabels();
+
+// ---------- result + layers ----------
+let result = null; // {W, H, paths:[{fill, xml}], layers:[{fill, paths:[...]}]}
+const hidden = new Set();
+function showResult(svgText, ms) {
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const root = doc.documentElement;
+  if (root.nodeName !== 'svg' || doc.querySelector('parsererror')) { setStatus('Het resultaat is geen geldige SVG.', true); return; }
+  const W = parseFloat(root.getAttribute('width')), H = parseFloat(root.getAttribute('height'));
+  const ser = new XMLSerializer();
+  const paths = [...root.querySelectorAll('path')].map((p) => ({
+    fill: (p.getAttribute('fill') || '#000000').toUpperCase(),
+    xml: ser.serializeToString(p).replace(/ xmlns="[^"]*"/g, ''),
+  }));
+  const map = new Map();
+  for (const p of paths) { if (!map.has(p.fill)) map.set(p.fill, []); map.get(p.fill).push(p); }
+  const layers = [...map.entries()].map(([fill, ps]) => ({ fill, paths: ps }));
+  // donker → licht
+  layers.sort((a, b) => lum(a.fill) - lum(b.fill));
+  result = { W, H, paths, layers, ms };
+  hidden.clear();
+  renderOutputs();
+  setStatus(`Klaar in ${(ms / 1000).toFixed(1)} s. Verschuif de schuifjes om het resultaat aan te passen.`);
+}
+function lum(hex) { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); }
+function buildSvg(paths, forDownload = true) {
+  const { W, H } = result;
+  const mm = +$('widthMm').value;
+  let size = `width="${W}" height="${H}"`;
+  if (forDownload && mm > 0) size = `width="${fmt(mm)}mm" height="${fmt(mm * H / W)}mm"`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Gemaakt met VTracer (visioncortex) via tech-demos-henna.vercel.app -->\n` +
+    `<svg version="1.1" xmlns="http://www.w3.org/2000/svg" ${size} viewBox="0 0 ${W} ${H}">\n` +
+    paths.map((p) => p.xml).join('\n') + '\n</svg>\n';
+}
+const fmt = (x) => (Math.round(x * 100) / 100).toString();
+function previewSvg() {
+  const visible = result.paths.filter((p) => !hidden.has(p.fill));
+  const s = buildSvg(visible, false).replace(/^<\?xml[^>]*>\s*<!--[^>]*-->\s*/, '');
+  $('stageB').innerHTML = s;
+  const svg = $('stageB').querySelector('svg');
+  svg.removeAttribute('width'); svg.removeAttribute('height');
+  svg.style.width = '100%'; svg.style.height = zoom > 1 ? 'auto' : '100%';
+}
+function renderOutputs() {
+  previewSvg();
+  const full = buildSvg(result.paths);
+  const kb = new Blob([full]).size / 1024;
+  const np = result.paths.length;
+  $('svgInfo').textContent = `${np} pad${np === 1 ? '' : 'en'}`;
+  const mm = +$('widthMm').value;
+  $('stats').innerHTML = [
+    `🎨 ${result.layers.length} kleurlaag${result.layers.length === 1 ? '' : 'en'}`,
+    `✏️ ${np} pad${np === 1 ? '' : 'en'}`,
+    `📦 ${kb < 1024 ? kb.toFixed(0) + ' KB' : (kb / 1024).toFixed(1) + ' MB'}`,
+    mm > 0 ? `📏 ${fmt(mm)} × ${fmt(mm * result.H / result.W)} mm` : `📏 ${result.W} × ${result.H} px`,
+    `⏱️ ${(result.ms / 1000).toFixed(1)} s`,
+  ].map((t) => `<span class="pill">${t}</span>`).join('');
+  const list = $('layers'); list.innerHTML = '';
+  result.layers.forEach((L, i) => {
+    const row = document.createElement('div'); row.className = 'layer';
+    row.innerHTML = `<span class="sw" style="background:${L.fill}"></span>
+      <span class="name">Laag ${i + 1} · ${L.fill} <span class="meta">(${L.paths.length} pad${L.paths.length === 1 ? '' : 'en'})</span></span>
+      <label class="meta"><input type="checkbox" ${hidden.has(L.fill) ? '' : 'checked'}> tonen</label>
+      <button class="btn small">⬇️ SVG</button>`;
+    row.querySelector('input').onchange = (e) => { e.target.checked ? hidden.delete(L.fill) : hidden.add(L.fill); previewSvg(); };
+    row.querySelector('button').onclick = () => download(buildSvg(L.paths), `${baseName()}-laag-${pad(i + 1)}-${L.fill.slice(1)}.svg`, 'image/svg+xml');
+    list.appendChild(row);
+  });
+  $('dlSvg').disabled = false; $('dlZip').disabled = false;
+}
+const pad = (n) => String(n).padStart(2, '0');
+const baseName = () => (source ? source.name : 'afbeelding').replace(/[^\w\-]+/g, '_') + (seg('segColor') === 'bw' ? '-zwartwit' : '');
+function download(data, name, type) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+$('dlSvg').onclick = () => result && download(buildSvg(result.paths), `${baseName()}.svg`, 'image/svg+xml');
+$('dlZip').onclick = () => {
+  if (!result) return;
+  const files = result.layers.map((L, i) => ({ name: `${baseName()}-laag-${pad(i + 1)}-${L.fill.slice(1)}.svg`, data: buildSvg(L.paths) }));
+  files.push({ name: `${baseName()}-alles.svg`, data: buildSvg(result.paths) });
+  download(makeZip(files), `${baseName()}-lagen.zip`, 'application/zip');
+};
+
+// ---------- tiny zip writer (geen compressie) ----------
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files) {
+  const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
+  const d = new Date(); const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  for (const f of files) {
+    const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, dosTime, true); h.setUint16(12, dosDate, true); h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+    parts.push(new Uint8Array(h.buffer), name, data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+    c.setUint16(12, dosTime, true); c.setUint16(14, dosDate, true); c.setUint32(16, crc, true); c.setUint32(20, data.length, true);
+    c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, offset, true);
+    central.push(new Uint8Array(c.buffer), name);
+    offset += 30 + name.length + data.length;
+  }
+  const cSize = central.reduce((s, p) => s + p.length, 0);
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, cSize, true); e.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)]);
+}
+
+// ---------- zoom (beide kanten samen) ----------
+let zoom = 1;
+const viewA = $('viewA'), viewB = $('viewB');
+function setZoom(z) {
+  zoom = Math.min(8, Math.max(1, z));
+  $('zoom').value = Math.round(zoom * 100); $('zoomVal').textContent = Math.round(zoom * 100) + '%';
+  for (const v of [viewA, viewB]) {
+    v.classList.toggle('zoomed', zoom > 1);
+    v.querySelector('.stage').style.width = zoom > 1 ? (zoom * 100) + '%' : '';
+  }
+  const svg = $('stageB').querySelector('svg'); if (svg) svg.style.height = zoom > 1 ? 'auto' : '100%';
+}
+$('zoom').oninput = (e) => setZoom(e.target.value / 100);
+$('zoomIn').onclick = () => setZoom(zoom * 1.5);
+$('zoomOut').onclick = () => setZoom(zoom / 1.5);
+$('zoomFit').onclick = () => setZoom(1);
+let lock = null;
+for (const [a, b] of [[viewA, viewB], [viewB, viewA]]) a.addEventListener('scroll', () => {
+  if (lock === a) return;
+  const fx = a.scrollLeft / Math.max(1, a.scrollWidth - a.clientWidth), fy = a.scrollTop / Math.max(1, a.scrollHeight - a.clientHeight);
+  lock = b; b.scrollLeft = fx * (b.scrollWidth - b.clientWidth); b.scrollTop = fy * (b.scrollHeight - b.clientHeight);
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (lock === b) lock = null; }));
+});
+
+window.__vt = { get result() { return result; }, get busy() { return busy || pending; }, options };
+</script>
+</body>
+</html>
