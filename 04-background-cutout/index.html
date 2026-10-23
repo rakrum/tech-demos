@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Achtergrond weghalen · BiRefNet demo</title>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1060px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 14px; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    input[type=file] { display:none; }
+    .drop { margin:0 14px 14px; border:2px dashed var(--line); border-radius:12px; padding:18px; text-align:center; color:var(--muted); }
+    .drop.drag { border-color:var(--accent); background:rgba(79,107,255,.06); color:var(--accent); }
+    .status { padding:0 14px 12px; font-size:.92rem; color:var(--muted); min-height:1.2em; }
+    .status.err { color:#c0392b; }
+    .progress { height:6px; margin:0 14px 12px; background:#eceffa; border-radius:99px; overflow:hidden; display:none; }
+    .progress > div { height:100%; width:0; background:var(--accent); transition:width .2s; }
+    .pair { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px; }
+    .pair figure { margin:0; }
+    .pair figcaption { font-size:.85rem; color:var(--muted); margin-bottom:6px; }
+    .frame { height:min(52vh,420px); border-radius:10px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#eef0f6; }
+    .frame.checker { background-color:#fff; background-image:linear-gradient(45deg,#d9dce5 25%,transparent 25%),linear-gradient(-45deg,#d9dce5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d9dce5 75%),linear-gradient(-45deg,transparent 75%,#d9dce5 75%); background-size:20px 20px; background-position:0 0,0 10px,10px -10px,-10px 0; }
+    .frame img, .frame canvas { max-width:100%; max-height:100%; display:block; }
+    .empty { color:var(--muted); font-size:.9rem; }
+    .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px 20px; padding:4px 14px 14px; font-size:.92rem; }
+    .controls label { display:flex; flex-direction:column; gap:4px; }
+    .controls .row { display:flex; justify-content:space-between; }
+    .controls .val { color:var(--accent); font-weight:600; }
+    .seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; align-self:flex-start; }
+    .seg button { border:0; background:#fff; padding:7px 12px; font-size:.92rem; cursor:pointer; color:var(--ink); border-right:1px solid var(--line); display:inline-flex; align-items:center; gap:6px; }
+    .seg button:last-child { border-right:0; }
+    .seg button.on { background:var(--accent); color:#fff; }
+    input[type=color] { width:26px; height:20px; padding:0; border:1px solid var(--line); border-radius:4px; background:none; cursor:pointer; }
+    .meta { color:var(--muted); font-size:.85rem; }
+    .tip { padding:12px 14px; border-radius:12px; background:#eef1ff; border:1px solid #d9dfff; font-size:.95rem; margin-bottom:12px; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+    @media (max-width:760px) { .pair { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>✂️ Achtergrond weghalen</h1>
+  <p class="sub">Een AI-model haalt de achtergrond van je foto weg, ook rond haar, vacht en fijne randjes. Je krijgt een PNG met een doorzichtige achtergrond, klaar voor je UV-print of voor de SVG-demo.</p>
+
+  <div class="card">
+    <h2>1. Kies een foto</h2>
+    <div class="bar">
+      <button class="btn primary" id="pick">📷 Kies een foto</button>
+      <button class="btn" id="sample">🐕 Probeer het voorbeeld</button>
+      <input type="file" id="file" accept="image/*">
+      <span class="meta" id="device"></span>
+    </div>
+    <div class="drop" id="drop">…of sleep een foto hierheen. Je foto blijft op je eigen computer; er wordt niets geüpload.</div>
+    <div class="progress" id="progress"><div></div></div>
+    <div class="status" id="status">Klaar om te beginnen.</div>
+    <div class="pair">
+      <figure><figcaption>Jouw foto <span class="meta" id="origInfo"></span></figcaption><div class="frame"><img id="photo" alt="Gekozen foto" hidden><span class="empty" id="photoEmpty">Nog geen foto</span></div></figure>
+      <figure><figcaption>Uitsnede</figcaption><div class="frame checker" id="outFrame"><canvas id="out" hidden></canvas><span class="empty" id="outEmpty">Hier komt je uitsnede</span></div></figure>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Afwerken en downloaden</h2>
+    <div class="controls">
+      <label>Achtergrond
+        <span class="seg" id="segBg">
+          <button data-v="transparent" class="on">Doorzichtig</button>
+          <button data-v="white">Wit</button>
+          <button data-v="color">Kleur <input type="color" id="bgColor" value="#4f6bff" title="Kies een kleur"></button>
+        </span>
+      </label>
+      <label><span class="row">Randzachtheid <span class="val" id="softV"></span></span><input type="range" id="soft" min="0" max="100" step="1" value="100">
+        <span class="meta">100% = zoals de AI het ziet (mooi bij haar en vacht), 0% = harde rand.</span></label>
+      <label><span class="row">Drempel <span class="val" id="threshV"></span></span><input type="range" id="thresh" min="5" max="95" step="1" value="50">
+        <span class="meta">Hoger = strenger: twijfelgevallen gaan eerder weg.</span></label>
+    </div>
+    <div class="bar">
+      <button class="btn primary" id="download" disabled>⬇️ Download PNG</button>
+      <button class="btn" id="toSvg" disabled>🦜 Naar SVG (VTracer)</button>
+      <button class="btn" id="reset">↺ Standaard</button>
+      <span class="meta" id="outInfo"></span>
+    </div>
+  </div>
+
+  <div class="tip">💡 <b>UV-print met de xTool O1:</b> download de PNG met een <b>doorzichtige</b> achtergrond en sleep hem in <b>xTool Creative Space</b>. Zo wordt alleen het onderwerp geprint. Print je op een donkere of gekleurde ondergrond (zoals een sneaker of hoesje), zet dan een witte onderlaag aan, zodat de kleuren goed dekken en niet doorschijnen.</div>
+
+  <ul class="help">
+    <li>De eerste keer laadt je browser het AI-model (BiRefNet: ±115–225 MB; reservemodel: ±45 MB). Daarna staat het in de cache.</li>
+    <li>Werkt het best in Chrome of Edge op een computer met een stevige grafische kaart: dan gebruikt de demo <b>BiRefNet</b>. Kan je browser of GPU dat niet aan, dan schakelt hij vanzelf over op het lichtere reservemodel <b>ormbg</b>. Dat werkt overal, maar is minder netjes rond haar en vacht. Bovenaan zie je welk model er draait.</li>
+    <li>Naar SVG stuurt een versie met harde randen door, want halfdoorzichtige randjes worden in een SVG lelijke lijntjes.</li>
+    <li>De AI kijkt naar een verkleinde versie (1024 × 1024); de download heeft wel de volle resolutie van je foto. Heel grote foto's maken de schuifjes wat trager.</li>
+    <li>Een duidelijk onderwerp werkt het best. Bij drukke foto's met meerdere dingen kiest de AI zelf wat "het onderwerp" is.</li>
+  </ul>
+
+  <footer>
+    Model: <a href="https://huggingface.co/onnx-community/BiRefNet_lite-ONNX">BiRefNet lite (ONNX)</a> van <a href="https://github.com/ZhengPeng7/BiRefNet">Peng Zheng e.a.</a>, MIT-licentie, Reservemodel: <a href="https://huggingface.co/onnx-community/ormbg-ONNX">ormbg (ONNX)</a> van <a href="https://huggingface.co/schirrmacher/ormbg">Maximilian Schirrmacher</a>, Apache-2.0. Beide draaien lokaal via <a href="https://github.com/huggingface/transformers.js">Transformers.js</a> (Apache-2.0).
+    Voorbeeldfoto: <a href="https://commons.wikimedia.org/wiki/File:White_Swiss_Shepherd_portrait.jpg">White Swiss Shepherd portrait</a> door Joselodos, CC0 (Wikimedia Commons), verkleind naar 1280 px.
+  </footer>
+</main>
+
+<script type="module">
+const TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1';
+const MODEL = 'onnx-community/BiRefNet_lite-ONNX';
+const $ = (id) => document.getElementById(id);
+const statusEl = $('status'), progEl = $('progress'), progBar = progEl.firstElementChild;
+function setStatus(msg, err = false) { statusEl.textContent = msg; statusEl.classList.toggle('err', err); }
+function setProgress(p) {
+  if (p == null) { progEl.style.display = 'none'; return; }
+  progEl.style.display = 'block'; progBar.style.width = Math.round(p * 100) + '%';
+}
+
+// ---------- AI model ----------
+// Eerste keus: BiRefNet lite op de grafische kaart (WebGPU). Kan dat niet (geen WebGPU,
+// of de GPU kan het model niet aan), dan valt de demo terug op het lichtere ormbg via WASM.
+const MODELS = {
+  birefnet: { id: 'onnx-community/BiRefNet_lite-ONNX', name: 'BiRefNet lite', input: 'input_image', logits: true },
+  ormbg: { id: 'onnx-community/ormbg-ONNX', name: 'ormbg (reserve)', input: 'pixel_values', logits: false },
+};
+const FAIL_KEY = 'td04-birefnet-werkt-niet';
+let tf = null, ai = null, aiPromise = null, deviceLabel = '';
+let useReserve = new URLSearchParams(location.search).has('reserve') || localStorage.getItem(FAIL_KEY) === '1';
+// BiRefNet lite heeft op de GPU minstens 11 'storage buffers' per shader nodig.
+async function gpuPlan() {
+  try {
+    const a = navigator.gpu && await navigator.gpu.requestAdapter();
+    if (!a || a.limits.maxStorageBuffersPerShaderStage < 11) return null;
+    return { dtype: a.features.has('shader-f16') ? 'fp16' : 'fp32' };
+  } catch { return null; }
+}
+class BiRefNetFailed extends Error {}
+function loadModel() {
+  if (aiPromise) return aiPromise;
+  aiPromise = (async () => {
+    tf = tf || await import(TF_URL);
+    const files = {};
+    const progress_callback = (e) => {
+      if (e.status === 'progress' && e.file) {
+        files[e.file] = { loaded: e.loaded || 0, total: e.total || 0 };
+        let l = 0, t = 0;
+        for (const f of Object.values(files)) { l += f.loaded; t += f.total; }
+        if (t > 0) {
+          setProgress(l / t);
+          setStatus(`AI-model downloaden (eenmalig): ${(l / 1e6).toFixed(0)} van ${(t / 1e6).toFixed(0)} MB…`);
+        }
+      }
+    };
+    const gpu = useReserve ? null : await gpuPlan();
+    const t = gpu ? { key: 'birefnet', device: 'webgpu', dtype: gpu.dtype, label: 'WebGPU (snel)' }
+                  : { key: 'ormbg', device: 'wasm', dtype: 'q8', label: 'reserve-modus (WASM)' };
+    const cfg = MODELS[t.key];
+    try {
+      setStatus(`AI-model laden (${cfg.name})…`);
+      const processor = await tf.AutoProcessor.from_pretrained(cfg.id);
+      const model = await tf.AutoModel.from_pretrained(cfg.id, { device: t.device, dtype: t.dtype, progress_callback });
+      deviceLabel = `${cfg.name} via ${t.label}`;
+      $('device').textContent = 'AI: ' + deviceLabel;
+      setProgress(null);
+      return (ai = { model, processor, cfg, device: t.device });
+    } catch (e) {
+      aiPromise = null;
+      if (t.key === 'birefnet') { console.warn('BiRefNet laden mislukt', e); throw new BiRefNetFailed(String(e?.message || e)); }
+      throw e;
+    }
+  })();
+  return aiPromise;
+}
+async function predict(image) {
+  const { pixel_values } = await ai.processor(image);
+  return ai.model({ [ai.cfg.input]: pixel_values });
+}
+
+// ---------- state ----------
+let src = null;      // { canvas (full res RGBA), name, W, H }
+let mask = null;     // Uint8ClampedArray W*H, raw AI alpha 0..255
+let cutCanvas = null; // full-res composite
+let busy = false;
+
+function loadImage(url) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Kon de afbeelding niet openen.')); im.src = url; });
+}
+
+async function processImage(url, name, isObjectUrl) {
+  if (busy) return;
+  busy = true; setButtons(false); $('pick').disabled = $('sample').disabled = true;
+  try {
+    setStatus('Foto laden…');
+    const im = await loadImage(url);
+    const W = im.naturalWidth, H = im.naturalHeight;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    c.getContext('2d', { willReadFrequently: true }).drawImage(im, 0, 0);
+    src = { canvas: c, name, W, H }; mask = null;
+    $('photo').src = url; $('photo').hidden = false; $('photoEmpty').hidden = true;
+    $('origInfo').textContent = `(${W} × ${H} px)`;
+    $('out').hidden = true; $('outEmpty').hidden = false; $('outEmpty').textContent = 'Bezig…';
+
+    try { await loadModel(); }
+    catch (e) { if (e instanceof BiRefNetFailed) return await switchToReserve(c, name, e); throw e; }
+    setStatus('Achtergrond weghalen…'); setProgress(null);
+    const t0 = performance.now();
+    // model input: verkleinde kopie (de processor maakt er 1024×1024 van)
+    const s = Math.min(1, 1024 / Math.max(W, H));
+    const small = document.createElement('canvas');
+    small.width = Math.max(1, Math.round(W * s)); small.height = Math.max(1, Math.round(H * s));
+    small.getContext('2d').drawImage(c, 0, 0, small.width, small.height);
+    const image = tf.RawImage.fromCanvas(small).rgb();
+    let out;
+    try { out = await predict(image); }
+    catch (e) {
+      if (ai.cfg !== MODELS.birefnet) throw e;
+      return await switchToReserve(c, name, e);
+    }
+    let t = out.output_image ?? out.alphas ?? Object.values(out)[0];
+    if (t.type !== 'float32') t = t.to('float32');
+    const [, , mh, mw] = t.dims;
+    const d = t.data;
+    // sigmoid -> grijswaarden-canvas -> opschalen naar volle resolutie
+    const mc = document.createElement('canvas'); mc.width = mw; mc.height = mh;
+    const mctx = mc.getContext('2d');
+    const md = mctx.createImageData(mw, mh);
+    for (let i = 0; i < mw * mh; i++) {
+      const v = ai.cfg.logits ? 255 / (1 + Math.exp(-d[i])) : d[i] * 255;
+      md.data[i * 4] = md.data[i * 4 + 1] = md.data[i * 4 + 2] = v; md.data[i * 4 + 3] = 255;
+    }
+    mctx.putImageData(md, 0, 0);
+    const big = document.createElement('canvas'); big.width = W; big.height = H;
+    const bctx = big.getContext('2d', { willReadFrequently: true });
+    bctx.imageSmoothingEnabled = true; bctx.imageSmoothingQuality = 'high';
+    bctx.drawImage(mc, 0, 0, W, H);
+    const bd = bctx.getImageData(0, 0, W, H).data;
+    mask = new Uint8ClampedArray(W * H);
+    for (let i = 0; i < W * H; i++) mask[i] = bd[i * 4];
+    if (isObjectUrl) setTimeout(() => URL.revokeObjectURL(url), 1000);
+    render();
+    setStatus(`Klaar in ${((performance.now() - t0) / 1000).toFixed(1)} s. Kies een achtergrond en download je PNG.`);
+    setButtons(true);
+  } catch (e) {
+    console.error(e);
+    setProgress(null);
+    $('outEmpty').textContent = 'Hier komt je uitsnede';
+    setStatus('Er ging iets mis: ' + (e?.message || e) + ' Probeer het opnieuw of gebruik Chrome/Edge.', true);
+  } finally {
+    busy = false; $('pick').disabled = $('sample').disabled = false;
+  }
+}
+
+// Deze GPU kan BiRefNet toch niet aan: onthouden, foto bewaren en de pagina herladen
+// met het reservemodel (na een mislukte GPU-poging is een schone start nodig).
+async function switchToReserve(canvas, name, err) {
+  console.warn('BiRefNet lukte niet op deze computer, over op het reservemodel', err);
+  try { localStorage.setItem(FAIL_KEY, '1'); } catch {}
+  setProgress(null);
+  setStatus('Je grafische kaart kan BiRefNet niet aan; ik herlaad met het lichtere reservemodel…');
+  const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+  await idbPut('retry', { blob, name, ts: Date.now() });
+  location.replace(location.pathname + '?reserve=1&opnieuw=1');
+}
+
+// ---------- afwerken ----------
+function seg(id) { return $(id).querySelector('.on').dataset.v; }
+function setSeg(id, v) { $(id).querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v)); }
+function setButtons(on) { $('download').disabled = $('toSvg').disabled = !on; }
+function refreshLabels() { $('softV').textContent = $('soft').value + '%'; $('threshV').textContent = $('thresh').value + '%'; }
+
+// alpha-lijn: drempel t (midden) en zachtheid (breedte van de overgang)
+function alphaLUT() {
+  const t = +$('thresh').value / 100 * 255, w = +$('soft').value / 100 * 255;
+  const lut = new Uint8ClampedArray(256);
+  for (let a = 0; a < 256; a++) {
+    if (w < 1) lut[a] = a >= t ? 255 : 0;
+    else lut[a] = Math.round(Math.min(1, Math.max(0, (a - (t - w / 2)) / w)) * 255);
+  }
+  return lut;
+}
+function render() {
+  if (!src || !mask) return;
+  const { W, H } = src;
+  const lut = alphaLUT();
+  const sd = src.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H);
+  const p = sd.data;
+  for (let i = 0; i < W * H; i++) p[i * 4 + 3] = lut[mask[i]];
+  if (!cutCanvas) cutCanvas = document.createElement('canvas');
+  cutCanvas.width = W; cutCanvas.height = H;
+  const cctx = cutCanvas.getContext('2d');
+  const bg = seg('segBg');
+  if (bg === 'transparent') cctx.putImageData(sd, 0, 0);
+  else {
+    const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
+    tmp.getContext('2d').putImageData(sd, 0, 0);
+    cctx.fillStyle = bg === 'white' ? '#ffffff' : $('bgColor').value;
+    cctx.fillRect(0, 0, W, H);
+    cctx.drawImage(tmp, 0, 0);
+  }
+  const out = $('out');
+  out.width = W; out.height = H;
+  out.getContext('2d').drawImage(cutCanvas, 0, 0);
+  out.hidden = false; $('outEmpty').hidden = true;
+  const label = { transparent: 'doorzichtige achtergrond', white: 'witte achtergrond', color: 'gekleurde achtergrond' }[bg];
+  $('outInfo').textContent = `${W} × ${H} px · ${label}`;
+}
+let raf = 0;
+function schedule() { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); }
+['soft', 'thresh'].forEach((id) => $(id).addEventListener('input', () => { refreshLabels(); schedule(); }));
+$('segBg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  setSeg('segBg', b.dataset.v); schedule();
+});
+$('bgColor').addEventListener('input', () => { setSeg('segBg', 'color'); schedule(); });
+$('reset').onclick = () => { $('soft').value = 100; $('thresh').value = 50; setSeg('segBg', 'transparent'); refreshLabels(); schedule(); };
+refreshLabels();
+
+function cutoutBlob() { return new Promise((r) => cutCanvas.toBlob(r, 'image/png')); }
+$('download').onclick = async () => {
+  if (!cutCanvas) return;
+  const blob = await cutoutBlob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${src.name}-uitsnede.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+
+// ---------- doorgeven aan demo 03 (VTracer) via IndexedDB ----------
+function idb() {
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open('tech-demos', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('handoff');
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+  });
+}
+async function idbPut(key, val) {
+  const db = await idb();
+  await new Promise((res, rej) => { const tx = db.transaction('handoff', 'readwrite'); tx.objectStore('handoff').put(val, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  db.close();
+}
+async function idbTake(key) {
+  const db = await idb();
+  const val = await new Promise((res, rej) => { const tx = db.transaction('handoff', 'readwrite'); const st = tx.objectStore('handoff'); const rq = st.get(key); rq.onsuccess = () => { st.delete(key); res(rq.result); }; rq.onerror = () => rej(rq.error); });
+  db.close();
+  return val;
+}
+$('toSvg').onclick = async () => {
+  if (!cutCanvas) return;
+  const win = window.open('about:blank', '_blank');
+  try {
+    // VTracer tekent halfdoorzichtige randpixels als een gekleurde rand; daarom krijgt
+    // de SVG-demo een versie met harde randen (alles boven 50% wordt helemaal zichtbaar).
+    const hard = document.createElement('canvas'); hard.width = cutCanvas.width; hard.height = cutCanvas.height;
+    const hctx = hard.getContext('2d');
+    hctx.drawImage(cutCanvas, 0, 0);
+    const id = hctx.getImageData(0, 0, hard.width, hard.height);
+    for (let i = 3; i < id.data.length; i += 4) id.data[i] = id.data[i] >= 128 ? 255 : 0;
+    hctx.putImageData(id, 0, 0);
+    const blob = await new Promise((r) => hard.toBlob(r, 'image/png'));
+    await idbPut('cutout', { blob, name: `${src.name}-uitsnede`, ts: Date.now() });
+    const url = '../03-vtracer-svg/?van=uitsnede';
+    if (win) win.location.href = url; else location.href = url;
+  } catch (e) {
+    if (win) win.close();
+    console.error(e); setStatus('Doorsturen naar de SVG-demo lukte niet: ' + (e?.message || e), true);
+  }
+};
+
+// ---------- invoer ----------
+function useFile(f) {
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { setStatus('Dat is geen afbeelding. Kies een JPG of PNG.', true); return; }
+  processImage(URL.createObjectURL(f), f.name.replace(/\.[^.]+$/, ''), true);
+}
+$('pick').onclick = () => $('file').click();
+$('file').onchange = (e) => { useFile(e.target.files[0]); e.target.value = ''; };
+$('sample').onclick = () => processImage('voorbeeld-hond.jpg', 'hond', false);
+const drop = $('drop');
+['dragenter', 'dragover'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave', 'drop'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === 'drop' || e.target === drop) drop.classList.remove('drag'); }));
+document.addEventListener('drop', (e) => useFile(e.dataTransfer.files[0]));
+
+if (new URLSearchParams(location.search).has('opnieuw')) idbTake('retry').then((it) => {
+  history.replaceState(null, '', location.pathname);
+  if (it && it.blob) processImage(URL.createObjectURL(it.blob), it.name || 'foto', true);
+}).catch((e) => console.warn(e));
+
+window.__bg = { get busy() { return busy; }, get mask() { return mask; }, get cut() { return cutCanvas; }, get device() { return deviceLabel; } };
+</script>
+</body>
+</html>
