@@ -232,6 +232,16 @@ const drop = $('drop');
 ['dragenter', 'dragover'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
 ['dragleave', 'drop'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === 'drop' || e.target === drop) drop.classList.remove('drag'); }));
 document.addEventListener('drop', (e) => useFile(e.dataTransfer.files[0]));
+// Uitsnede doorgestuurd vanuit demo 04 (achtergrond weghalen)? Dan meteen laden.
+if (new URLSearchParams(location.search).get('van') === 'uitsnede') (async () => {
+  try {
+    const db = await new Promise((res, rej) => { const rq = indexedDB.open('tech-demos', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('handoff'); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); });
+    const item = await new Promise((res, rej) => { const rq = db.transaction('handoff').objectStore('handoff').get('cutout'); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); });
+    db.close();
+    history.replaceState(null, '', location.pathname);
+    if (item && item.blob) loadImage(URL.createObjectURL(item.blob), item.name || 'uitsnede');
+  } catch (e) { console.warn('Uitsnede ophalen mislukt', e); }
+})();
 
 // ---------- controls ----------
 const DEFAULTS = { color: 'color', mode: 'spline', threshold: 128, maxColors: 12, colorPrecision: 6, layerDifference: 16, filterSpeckle: 4,
