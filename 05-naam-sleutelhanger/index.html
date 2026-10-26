@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Naam-sleutelhanger · Manifold demo</title>
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  } }
+  </script>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1060px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .layout { display:grid; grid-template-columns:minmax(300px,380px) 1fr; grid-template-areas:'design view' 'design tips'; gap:0 16px; align-items:start; }
+    .a-design { grid-area:design; } .a-view { grid-area:view; } .a-tips { grid-area:tips; }
+    .controls { display:flex; flex-direction:column; gap:14px; padding:14px; font-size:.92rem; }
+    .controls label, .controls .field { display:flex; flex-direction:column; gap:6px; }
+    .controls .row { display:flex; justify-content:space-between; }
+    .controls .val { color:var(--accent); font-weight:600; }
+    input[type=text] { font-size:1.15rem; padding:9px 12px; border:1px solid var(--line); border-radius:10px; width:100%; }
+    input[type=text]:focus { outline:2px solid var(--accent); border-color:var(--accent); }
+    input[type=range] { width:100%; accent-color:var(--accent); }
+    .seg { display:flex; flex-wrap:wrap; gap:6px; }
+    .seg button { border:1px solid var(--line); background:#fff; padding:7px 11px; font-size:.92rem; cursor:pointer; color:var(--ink); border-radius:10px; }
+    .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .seg.fonts button { font-size:1.1rem; padding:5px 12px; }
+    .colors { display:flex; gap:16px; flex-wrap:wrap; }
+    .colors label { flex-direction:row; align-items:center; gap:8px; }
+    input[type=color] { width:34px; height:26px; padding:0; border:1px solid var(--line); border-radius:6px; background:none; cursor:pointer; }
+    .viewer { position:relative; height:min(62vh,520px); background:linear-gradient(#eef1fb,#dfe4f3); }
+    .viewer canvas { display:block; width:100%; height:100%; touch-action:none; }
+    .viewer .hint { position:absolute; left:10px; bottom:8px; font-size:.78rem; color:var(--muted); pointer-events:none; }
+    .viewer .busy { position:absolute; right:10px; top:8px; font-size:.8rem; color:var(--muted); display:none; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 14px; border-top:1px solid var(--line); }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:9px 13px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .status { padding:10px 14px; font-size:.9rem; color:var(--muted); min-height:1.2em; }
+    .status.err { color:#c0392b; }
+    .status.ok b { color:#1e8e4e; }
+    details { padding:0 14px 12px; font-size:.9rem; }
+    summary { cursor:pointer; color:var(--accent); padding:6px 0; }
+    ol.help, ul.help { color:var(--ink); font-size:.92rem; padding-left:20px; margin:8px 0; }
+    ol.help li, ul.help li { margin:4px 0; }
+    .tipbox { padding:4px 14px 12px; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+    @media (max-width:820px) { .layout { grid-template-columns:1fr; grid-template-areas:'view' 'design' 'tips'; } .viewer { height:42vh; min-height:260px; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🔑 Naam-sleutelhanger</h1>
+  <p class="sub">Typ een naam, kies een vorm en een lettertype, en download een printklaar bestand: een STL in één kleur of een 3MF met twee kleuren voor je Snapmaker U1. Alles wordt in je eigen browser berekend met <a href="https://github.com/elalish/manifold">Manifold</a>.</p>
+
+  <div class="layout">
+    <div class="card a-design">
+      <h2>1. Ontwerp</h2>
+      <div class="controls">
+        <label>Naam
+          <input type="text" id="name" value="Zehra" maxlength="20" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="field">Lettertype
+          <div class="seg fonts" id="segFont"></div>
+        </div>
+        <div class="field">Vorm
+          <div class="seg" id="segShape">
+            <button data-v="rond" class="on">▭ Afgerond</button>
+            <button data-v="pil">⬭ Pil</button>
+            <button data-v="hart">♥ Hart</button>
+            <button data-v="contour">✎ Volgt de letters</button>
+          </div>
+        </div>
+        <div class="field">Gaatje voor de sleutelring
+          <div class="seg" id="segHole">
+            <button data-v="links" class="on">Links</button>
+            <button data-v="boven">Boven</button>
+            <button data-v="geen">Geen</button>
+          </div>
+        </div>
+        <label><span class="row"><span>Breedte</span><span class="val" id="vWidth"></span></span><input type="range" id="width" min="35" max="90" step="1" value="55"></label>
+        <label><span class="row"><span>Dikte plaatje</span><span class="val" id="vBase"></span></span><input type="range" id="base" min="2" max="5" step="0.2" value="3"></label>
+        <label><span class="row"><span>Hoogte letters (bovenop)</span><span class="val" id="vLetters"></span></span><input type="range" id="letters" min="0.6" max="3" step="0.1" value="1.5"></label>
+        <label><span class="row"><span>Gaatje (diameter)</span><span class="val" id="vHoleD"></span></span><input type="range" id="holeD" min="3" max="7" step="0.5" value="4"></label>
+        <div class="field">Kleuren (voorbeeld en 3MF)
+          <div class="colors">
+            <label><input type="color" id="cBase" value="#ffffff"> Plaatje</label>
+            <label><input type="color" id="cLetters" value="#e0457b"> Letters</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      <div class="card a-view">
+        <h2>2. Bekijk en download</h2>
+        <div class="viewer" id="viewer"><span class="busy" id="busy">rekenen…</span><span class="hint">Draai met je vinger of muis · knijp of scroll om te zoomen</span></div>
+        <div class="status" id="status">Manifold en het lettertype worden geladen…</div>
+        <div class="bar">
+          <button class="btn primary" id="dl3mf" disabled>⬇ 3MF (twee kleuren)</button>
+          <button class="btn" id="dlStl" disabled>⬇ STL (één kleur)</button>
+          <button class="btn" id="resetView">↺ Beeld terugzetten</button>
+        </div>
+      </div>
+      <div class="card a-tips">
+        <h2>3. Printen op de Snapmaker U1</h2>
+        <div class="tipbox">
+          <ol class="help">
+            <li>Open de <b>3MF</b> in <b>Snapmaker Orca</b> (of OrcaSlicer). Krijg je de vraag of het één object met meerdere delen is, kies dan <b>Ja</b>.</li>
+            <li>Je ziet twee onderdelen: <b>Basis</b> en <b>Letters</b>. Geef elk onderdeel een eigen filament (bijvoorbeeld wit en roze).</li>
+            <li>Leg het plaatje plat op het bed (zo wordt hij al geopend), kies PLA, 0,2 mm laaghoogte, 15–20 % vulling. Steun is niet nodig.</li>
+            <li>Slicen en printen. Met de U1 wisselt de printer zelf van kleur, zonder veel afval.</li>
+          </ol>
+          <details><summary>Liever één kleur, of geen meerkleurenprinter?</summary>
+            <ul class="help">
+              <li>Download de <b>STL</b>: dat is één stevig geheel (plaatje + letters + gaatje).</li>
+              <li>Kleurwissel met de hand: laat de printer pauzeren op de laag waar de letters beginnen (op <span id="pauseH">3,0</span> mm) en wissel dan van filament.</li>
+            </ul>
+          </details>
+        </div>
+      </div>
+  </div>
+
+  <footer>
+    3D-rekenwerk: <a href="https://github.com/elalish/manifold">Manifold</a> van Emmett Lalish e.a., Apache-2.0. Letters: <a href="https://github.com/opentypejs/opentype.js">opentype.js</a>, MIT. 3D-weergave: <a href="https://threejs.org">three.js</a>, MIT. Lettertypes (SIL Open Font License, via <a href="https://github.com/google/fonts">Google Fonts</a>): Pacifico, Lobster, Lilita One en Titan One. Alles wordt geladen via jsDelivr en draait lokaal in je browser.
+  </footer>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import ManifoldModule from 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
+import { parse as parseFont } from 'https://cdn.jsdelivr.net/npm/opentype.js@2.0.0/dist/opentype.mjs';
+import { buildKeychain, toSTL, to3MF } from './keychain.js';
+
+const GF = 'https://cdn.jsdelivr.net/gh/google/fonts@e7db6ca603fd4862010383ff17ffd6cc4ffac1c0/ofl/';
+const FONTS = [
+  { id: 'pacifico', name: 'Pacifico', url: GF + 'pacifico/Pacifico-Regular.ttf' },
+  { id: 'lobster', name: 'Lobster', url: GF + 'lobster/Lobster-Regular.ttf' },
+  { id: 'lilita', name: 'Lilita One', url: GF + 'lilitaone/LilitaOne-Regular.ttf' },
+  { id: 'titan', name: 'Titan One', url: GF + 'titanone/TitanOne-Regular.ttf' },
+];
+const $ = (id) => document.getElementById(id);
+const state = { font: 'pacifico', shape: 'rond', hole: 'links' };
+const fontCache = {};
+const kc = window.__kc = { ready: false, busy: false, info: null, error: null, builds: 0 };
+let wasm, result = null;
+
+function setStatus(html, cls = '') { const s = $('status'); s.innerHTML = html; s.className = 'status ' + cls; }
+const nl = (x, d = 1) => x.toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+// lettertype-knoppen (met het lettertype zelf als voorbeeld)
+for (const f of FONTS) {
+  const b = document.createElement('button'); b.dataset.v = f.id; b.textContent = f.name; if (f.id === state.font) b.className = 'on';
+  $('segFont').appendChild(b);
+  new FontFace('kc-' + f.id, `url(${f.url})`).load().then((ff) => { document.fonts.add(ff); b.style.fontFamily = `'kc-${f.id}', system-ui`; }).catch(() => {});
+}
+function seg(id, key) {
+  $(id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return;
+    $(id).querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); state[key] = b.dataset.v; schedule(); });
+}
+seg('segFont', 'font'); seg('segShape', 'shape'); seg('segHole', 'hole');
+
+async function getFont(id) {
+  if (!fontCache[id]) {
+    const f = FONTS.find((x) => x.id === id);
+    fontCache[id] = fetch(f.url).then((r) => { if (!r.ok) throw new Error('Lettertype niet geladen (' + r.status + ')'); return r.arrayBuffer(); }).then(parseFont);
+  }
+  return fontCache[id];
+}
+
+// ---------- three.js ----------
+const viewer = $('viewer');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setClearColor(0x000000, 0);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+viewer.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8890a8, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0); sun.position.set(40, -60, 120); scene.add(sun);
+const sun2 = new THREE.DirectionalLight(0xffffff, 0.6); sun2.position.set(-60, 40, 60); scene.add(sun2);
+const group = new THREE.Group(); group.rotation.x = -Math.PI / 2; scene.add(group);
+const matBase = new THREE.MeshStandardMaterial({ color: $('cBase').value, roughness: 0.55 });
+const matLet = new THREE.MeshStandardMaterial({ color: $('cLetters').value, roughness: 0.45 });
+let meshBase = null, meshLet = null, firstFit = true;
+
+function geomFrom(m) {
+  const g = new THREE.BufferGeometry();
+  const k = m.numProp; const pos = k === 3 ? m.pos : Float32Array.from({ length: (m.pos.length / k) * 3 }, (_, i) => m.pos[Math.floor(i / 3) * k + (i % 3)]);
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(new THREE.BufferAttribute(m.tri, 1));
+  const flat = g.toNonIndexed(); flat.computeVertexNormals(); g.dispose(); return flat;
+}
+function fitView() {
+  const box = new THREE.Box3().setFromObject(group); const c = box.getCenter(new THREE.Vector3()); const s = box.getSize(new THREE.Vector3());
+  const vf = THREE.MathUtils.degToRad(camera.fov) / 2, hf = Math.atan(Math.tan(vf) * camera.aspect);
+  const d = Math.max(s.x / 2 / Math.tan(hf), s.z / 2 / Math.tan(vf) * 1.3, 20) * 1.35;
+  controls.target.copy(c); camera.position.set(c.x, c.y + d * 0.5, c.z + d * 0.87); camera.near = d / 50; camera.far = d * 20; camera.updateProjectionMatrix(); controls.update();
+}
+function resize() { const w = viewer.clientWidth, h = viewer.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (meshBase) fitView(); }
+new ResizeObserver(resize).observe(viewer); resize();
+(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+$('resetView').onclick = fitView;
+$('cBase').oninput = () => matBase.color.set($('cBase').value);
+$('cLetters').oninput = () => matLet.color.set($('cLetters').value);
+
+function show(r) {
+  for (const m of [meshBase, meshLet]) if (m) { group.remove(m); m.geometry.dispose(); }
+  meshBase = new THREE.Mesh(geomFrom(r.base), matBase); meshLet = new THREE.Mesh(geomFrom(r.letters), matLet);
+  group.add(meshBase, meshLet);
+  // midden van het plaatje in het midden van de scène
+  const box = new THREE.Box3().setFromObject(meshBase); const c = box.getCenter(new THREE.Vector3());
+  group.position.x -= c.x; group.position.z -= c.z;
+  if (firstFit) { fitView(); firstFit = false; } else { const b2 = new THREE.Box3().setFromObject(group); controls.target.copy(b2.getCenter(new THREE.Vector3())); }
+}
+
+// ---------- opbouwen ----------
+const sliders = { width: ['vWidth', 0], base: ['vBase', 1], letters: ['vLetters', 1], holeD: ['vHoleD', 1] };
+for (const [id, [vid, d]] of Object.entries(sliders)) {
+  const upd = () => { $(vid).textContent = nl(+$(id).value, d) + ' mm'; };
+  upd(); $(id).addEventListener('input', () => { upd(); schedule(); });
+}
+$('name').addEventListener('input', () => schedule());
+let timer = null, pending = false;
+function schedule() { clearTimeout(timer); timer = setTimeout(rebuild, 120); }
+async function rebuild() {
+  if (!wasm) return;
+  if (kc.busy) { pending = true; return; }
+  kc.busy = true; $('busy').style.display = 'block';
+  try {
+    const font = await getFont(state.font);
+    const opts = { text: $('name').value, shape: state.shape, hole: state.hole, width: +$('width').value, base: +$('base').value, letters: +$('letters').value, holeD: +$('holeD').value };
+    const t0 = performance.now();
+    const r = buildKeychain(wasm, font, opts);
+    r.opts = opts; result = r; kc.info = r.info; kc.error = null; kc.builds++;
+    show(r);
+    const [w, h, z] = r.info.size;
+    const ok = r.info.status === 'NoError' && r.info.pieces === 1;
+    $('pauseH').textContent = nl(opts.base, 1);
+    setStatus(`Afmeting <b>${nl(w)} × ${nl(h)} × ${nl(z)} mm</b> · letters ${nl(r.info.textH)} mm hoog · ` +
+      (ok ? '<b>✔ printklaar</b> (één dicht geheel)' : '⚠ bestaat uit losse stukjes; kies een andere vorm of een grotere breedte') +
+      ` <span style="opacity:.6">· ${Math.round(performance.now() - t0)} ms</span>`, ok ? 'ok' : 'err');
+    if (r.info.textH < 6) setStatus($('status').innerHTML + '<br>Tip: de letters zijn vrij klein. Maak de sleutelhanger breder of kies een kortere naam.', ok ? 'ok' : 'err');
+    $('dlStl').disabled = $('dl3mf').disabled = false;
+  } catch (e) {
+    console.warn(e); kc.error = String(e.message || e);
+    setStatus('Dit lukte niet: ' + kc.error, 'err');
+  } finally {
+    kc.busy = false; $('busy').style.display = 'none';
+    if (pending) { pending = false; schedule(); }
+  }
+}
+
+function fileBase() { return 'sleutelhanger-' + (($('name').value || 'naam').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'naam'); }
+function download(bytes, name, type) {
+  const url = URL.createObjectURL(new Blob([bytes], { type })); const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+kc.stl = () => toSTL(result.single, fileBase());
+kc.threemf = () => to3MF(result.base, result.letters, [$('cBase').value.toUpperCase(), $('cLetters').value.toUpperCase()], ($('name').value || 'Naam').trim());
+$('dlStl').onclick = () => result && download(kc.stl(), fileBase() + '.stl', 'model/stl');
+$('dl3mf').onclick = () => result && download(kc.threemf(), fileBase() + '.3mf', 'model/3mf');
+
+try {
+  const [m] = await Promise.all([ManifoldModule(), getFont(state.font)]);
+  m.setup(); wasm = m; kc.ready = true;
+  await rebuild();
+} catch (e) {
+  console.warn(e); kc.error = String(e.message || e);
+  setStatus('Laden mislukt: ' + kc.error + '. Controleer je internetverbinding en herlaad de pagina.', 'err');
+}
+</script>
+</body>
+</html>
