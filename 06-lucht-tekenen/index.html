@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="icon" href="data:,">
+  <title>Tekenen in de lucht · MediaPipe demo</title>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; --ok:#1e8e4e; --warn:#c0392b; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1060px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .layout { display:grid; grid-template-columns:minmax(280px,340px) 1fr; gap:0 16px; align-items:start; }
+    .controls { display:flex; flex-direction:column; gap:14px; padding:14px; font-size:.92rem; }
+    .controls label, .controls .field { display:flex; flex-direction:column; gap:6px; }
+    .controls .row { display:flex; justify-content:space-between; align-items:center; }
+    .controls .val { color:var(--accent); font-weight:600; }
+    input[type=range] { width:100%; accent-color:var(--accent); }
+    input[type=color] { width:42px; height:30px; padding:0; border:1px solid var(--line); border-radius:8px; background:none; cursor:pointer; }
+    .toggle { display:flex; align-items:center; gap:10px; }
+    .toggle input { width:18px; height:18px; accent-color:var(--accent); }
+    .stage-wrap { position:relative; background:#111827; aspect-ratio:4/3; max-height:min(70vh,560px); }
+    .stage { position:relative; width:100%; height:100%; overflow:hidden; touch-action:none; cursor:crosshair; }
+    .stage video, .stage canvas { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .stage video { transform:scaleX(-1); }
+    .stage #draw { z-index:2; }
+    .stage #skel { z-index:3; pointer-events:none; }
+    .stage .overlay { position:absolute; inset:0; z-index:4; display:flex; align-items:center; justify-content:center; background:rgba(17,24,39,.55); color:#fff; text-align:center; padding:24px; }
+    .stage .overlay.hidden { display:none; }
+    .stage .hint { position:absolute; left:10px; bottom:8px; z-index:5; font-size:.78rem; color:rgba(255,255,255,.75); pointer-events:none; }
+    .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:.8rem; font-weight:600; background:#eef1ff; color:var(--accent); }
+    .badge.ok { background:#e8f7ee; color:var(--ok); }
+    .badge.warn { background:#fdecea; color:var(--warn); }
+    .badge.muted { background:#eef0f6; color:var(--muted); }
+    .status-row { display:flex; flex-wrap:wrap; gap:8px; padding:10px 14px; border-top:1px solid var(--line); }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 14px; border-top:1px solid var(--line); }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:9px 13px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .privacy { padding:12px 14px; border-radius:12px; background:#eef1ff; border:1px solid #d9dfff; font-size:.95rem; margin-bottom:12px; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+    @media (max-width:820px) {
+      .layout { grid-template-columns:1fr; }
+      .stage-wrap { max-height:none; aspect-ratio:3/4; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>✋ Tekenen in de lucht</h1>
+  <p class="sub">Teken met je vingertop voor de camera. Een AI-model van Google volgt je hand live in de browser. Knijp (duim + wijsvinger) om de pen op te tillen. Download je tekening als SVG voor de xTool-laser of UV-printer, of als PNG.</p>
+
+  <div class="privacy">🔒 <b>Privacy:</b> camerabeelden blijven op jouw computer. Er wordt niets geüpload en er zijn geen accounts of API-sleutels nodig. Alles draait lokaal met <a href="https://developers.google.com/mediapipe/solutions/vision/hand_landmarker" target="_blank" rel="noopener">MediaPipe Hand Landmarker</a>.</div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>1. Instellingen</h2>
+      <div class="controls">
+        <label class="row">Kleur <input type="color" id="color" value="#4f6bff"></label>
+        <label><span class="row"><span>Lijndikte</span><span class="val" id="thickV">6 px</span></span>
+          <input type="range" id="thick" min="2" max="24" step="1" value="6"></label>
+        <label class="toggle"><input type="checkbox" id="showSkel" checked> Handgeraamte tonen</label>
+        <label class="toggle"><input type="checkbox" id="svgWhite"> SVG met witte achtergrond</label>
+        <div class="field">
+          <span class="row"><span>Status</span></span>
+          <div id="statusText" style="color:var(--muted);font-size:.9rem;">Klik op <b>Start camera</b>, of teken met muis/vinger als fallback.</div>
+        </div>
+      </div>
+      <div class="bar">
+        <button class="btn primary" id="startCam">📷 Start camera</button>
+        <button class="btn" id="stopCam" disabled>Stop camera</button>
+        <button class="btn" id="mouseMode">🖱 Muis/touch-modus</button>
+      </div>
+      <div class="bar">
+        <button class="btn" id="undo" disabled>↩ Ongedaan</button>
+        <button class="btn" id="clear" disabled>🗑 Wissen</button>
+        <button class="btn primary" id="dlSvg" disabled>⬇ SVG (100 mm)</button>
+        <button class="btn" id="dlPng" disabled>⬇ PNG</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Tekenen</h2>
+      <div class="stage-wrap">
+        <div class="stage" id="stage">
+          <video id="video" playsinline muted></video>
+          <canvas id="draw"></canvas>
+          <canvas id="skel"></canvas>
+          <div class="overlay" id="overlay">
+            <div>
+              <p style="margin:0 0 12px;font-size:1.05rem;">Klaar om te tekenen</p>
+              <p style="margin:0;opacity:.85;font-size:.92rem;">Start de camera, of teken met muis/vinger op dit vlak.</p>
+            </div>
+          </div>
+          <span class="hint" id="hint">Spiegelbeeld · knijp = pen omhoog · open = tekenen</span>
+        </div>
+      </div>
+      <div class="status-row">
+        <span class="badge muted" id="bCam">Camera uit</span>
+        <span class="badge muted" id="bModel">Model nog niet geladen</span>
+        <span class="badge muted" id="bHand">Geen hand</span>
+        <span class="badge muted" id="bPen">Pen omhoog</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3. Tips</h2>
+    <ul class="help">
+      <li>Zorg voor <b>goed licht</b> op je hand; een egale achtergrond werkt het best.</li>
+      <li>Houd je hand ongeveer een armlengte van de camera, wijsvinger duidelijk zichtbaar.</li>
+      <li><b>Knijp</b> (duimtip dicht bij wijsvingertip) om te pauzeren; open je hand weer om een nieuwe lijn te starten.</li>
+      <li>Download de <b>SVG</b> en open hem in <b>xTool Creative Space</b> voor laser/UV. De tekening is 100 mm breed.</li>
+      <li>Werkt de camera niet? Gebruik <b>Muis/touch-modus</b> — handig op de telefoon of om te testen.</li>
+    </ul>
+  </div>
+
+  <footer>
+    MediaPipe Hand Landmarker · <a href="https://github.com/google-ai-edge/mediapipe">google-ai-edge/mediapipe</a> · Apache-2.0 ·
+    model via Google Cloud Storage · bibliotheek via jsDelivr ·
+    <a href="../">← overzicht</a>
+  </footer>
+</main>
+
+<script type="module">
+import {
+  FilesetResolver,
+  HandLandmarker,
+  DrawingUtils
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/+esm";
+
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
+
+// Landmark indices
+const TIP_INDEX = 8;
+const TIP_THUMB = 4;
+const WRIST = 0;
+const MCP_MIDDLE = 9;
+
+const video = document.getElementById("video");
+const drawCanvas = document.getElementById("draw");
+const skelCanvas = document.getElementById("skel");
+const drawCtx = drawCanvas.getContext("2d");
+const skelCtx = skelCanvas.getContext("2d");
+const stage = document.getElementById("stage");
+const overlay = document.getElementById("overlay");
+
+const el = {
+  color: document.getElementById("color"),
+  thick: document.getElementById("thick"),
+  thickV: document.getElementById("thickV"),
+  showSkel: document.getElementById("showSkel"),
+  svgWhite: document.getElementById("svgWhite"),
+  statusText: document.getElementById("statusText"),
+  startCam: document.getElementById("startCam"),
+  stopCam: document.getElementById("stopCam"),
+  mouseMode: document.getElementById("mouseMode"),
+  undo: document.getElementById("undo"),
+  clear: document.getElementById("clear"),
+  dlSvg: document.getElementById("dlSvg"),
+  dlPng: document.getElementById("dlPng"),
+  bCam: document.getElementById("bCam"),
+  bModel: document.getElementById("bModel"),
+  bHand: document.getElementById("bHand"),
+  bPen: document.getElementById("bPen"),
+};
+
+/** @type {HandLandmarker|null} */
+let handLandmarker = null;
+let camStream = null;
+let rafId = 0;
+let lastVideoTime = -1;
+let mode = "idle"; // idle | camera | mouse
+let penDown = false;
+let strokes = []; // {color, width, points:[{x,y}]}  coords in canvas pixels
+let current = null;
+let filterX = null;
+let filterY = null;
+let modelReady = false;
+let handSeen = false;
+
+// --- One Euro Filter (Casiez et al.) ---
+class OneEuroFilter {
+  constructor(minCutoff = 1.0, beta = 0.007, dCutoff = 1.0) {
+    this.minCutoff = minCutoff;
+    this.beta = beta;
+    this.dCutoff = dCutoff;
+    this.xPrev = null;
+    this.dxPrev = 0;
+    this.tPrev = null;
+  }
+  static alpha(cutoff, te) {
+    const tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / te);
+  }
+  filter(x, t) {
+    if (this.tPrev == null) {
+      this.tPrev = t; this.xPrev = x; this.dxPrev = 0; return x;
+    }
+    const te = Math.max(1e-3, t - this.tPrev);
+    const dx = (x - this.xPrev) / te;
+    const aD = OneEuroFilter.alpha(this.dCutoff, te);
+    const dxHat = aD * dx + (1 - aD) * this.dxPrev;
+    const cutoff = this.minCutoff + this.beta * Math.abs(dxHat);
+    const a = OneEuroFilter.alpha(cutoff, te);
+    const xHat = a * x + (1 - a) * this.xPrev;
+    this.tPrev = t; this.xPrev = xHat; this.dxPrev = dxHat;
+    return xHat;
+  }
+  reset() { this.xPrev = null; this.dxPrev = 0; this.tPrev = null; }
+}
+
+function setBadge(node, text, kind) {
+  node.textContent = text;
+  node.className = "badge " + (kind || "muted");
+}
+
+function setStatus(msg) { el.statusText.innerHTML = msg; }
+
+function updateButtons() {
+  const has = strokes.length > 0 || !!current;
+  el.undo.disabled = strokes.length === 0 && !current;
+  el.clear.disabled = !has;
+  el.dlSvg.disabled = strokes.length === 0;
+  el.dlPng.disabled = strokes.length === 0;
+}
+
+function resizeCanvases() {
+  const rect = stage.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  for (const c of [drawCanvas, skelCanvas]) {
+    c.width = Math.max(1, Math.round(rect.width * dpr));
+    c.height = Math.max(1, Math.round(rect.height * dpr));
+    c.style.width = rect.width + "px";
+    c.style.height = rect.height + "px";
+  }
+  redrawAll();
+}
+
+function canvasPointFromNorm(nx, ny) {
+  // MediaPipe coords: origin top-left of image. Video is mirrored with CSS.
+  // We mirror x so drawing matches the mirrored view the user sees.
+  return { x: (1 - nx) * drawCanvas.width, y: ny * drawCanvas.height };
+}
+
+function dist(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.hypot(dx, dy);
+}
+
+function startStroke(x, y, color, width) {
+  current = { color, width, points: [{ x, y }] };
+  penDown = true;
+  setBadge(el.bPen, "Pen omlaag", "ok");
+  updateButtons();
+}
+
+function addPoint(x, y) {
+  if (!current) return;
+  const pts = current.points;
+  const last = pts[pts.length - 1];
+  if (dist(last, { x, y }) < 1.2) return;
+  pts.push({ x, y });
+  // incremental draw
+  drawCtx.strokeStyle = current.color;
+  drawCtx.lineWidth = current.width * (drawCanvas.width / stage.getBoundingClientRect().width);
+  drawCtx.lineCap = "round";
+  drawCtx.lineJoin = "round";
+  drawCtx.beginPath();
+  drawCtx.moveTo(last.x, last.y);
+  drawCtx.lineTo(x, y);
+  drawCtx.stroke();
+}
+
+function endStroke() {
+  if (current && current.points.length > 1) strokes.push(current);
+  current = null;
+  penDown = false;
+  filterX?.reset(); filterY?.reset();
+  setBadge(el.bPen, "Pen omhoog", "muted");
+  updateButtons();
+}
+
+function redrawAll() {
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  const scale = drawCanvas.width / Math.max(1, stage.getBoundingClientRect().width);
+  for (const s of strokes) strokePath(drawCtx, s, scale);
+  if (current) strokePath(drawCtx, current, scale);
+}
+
+function strokePath(ctx, s, scale) {
+  if (!s.points.length) return;
+  ctx.strokeStyle = s.color;
+  ctx.lineWidth = s.width * scale;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(s.points[0].x, s.points[0].y);
+  for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+  ctx.stroke();
+}
+
+function clearSkel() {
+  skelCtx.clearRect(0, 0, skelCanvas.width, skelCanvas.height);
+}
+
+async function ensureModel() {
+  if (handLandmarker) return handLandmarker;
+  setBadge(el.bModel, "Model laden…", "muted");
+  setStatus("MediaPipe-model wordt geladen (±8 MB, eenmalig)…");
+  const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+  handLandmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: MODEL_URL,
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numHands: 1,
+    minHandDetectionConfidence: 0.6,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+  modelReady = true;
+  setBadge(el.bModel, "Model klaar", "ok");
+  setStatus("Model geladen. Start de camera of teken met muis/vinger.");
+  // Expose for tests
+  window.__luchtDemo = api;
+  return handLandmarker;
+}
+
+async function startCamera() {
+  overlay.classList.add("hidden");
+  setStatus("Camera starten…");
+  setBadge(el.bCam, "Camera laden…", "muted");
+  try {
+    await ensureModel();
+  } catch (e) {
+    console.error(e);
+    setBadge(el.bModel, "Model mislukt", "warn");
+    setStatus("Kon het model niet laden. Je kunt nog wel tekenen in muis/touch-modus. <code>" + (e.message || e) + "</code>");
+    enterMouseMode();
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: "user",
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
+  } catch (e) {
+    console.error(e);
+    setBadge(el.bCam, "Camera geweigerd", "warn");
+    setStatus("Geen toegang tot de camera. Teken met muis/vinger, of geef cameratoestemming en probeer opnieuw.");
+    enterMouseMode();
+    return;
+  }
+  video.srcObject = camStream;
+  await video.play();
+  mode = "camera";
+  el.startCam.disabled = true;
+  el.stopCam.disabled = false;
+  setBadge(el.bCam, "Camera aan", "ok");
+  setStatus("Wijs met je wijsvinger. Knijp (duim + wijsvinger) om de pen op te tillen.");
+  filterX = new OneEuroFilter(1.2, 0.02, 1.0);
+  filterY = new OneEuroFilter(1.2, 0.02, 1.0);
+  lastVideoTime = -1;
+  loop();
+}
+
+function stopCamera() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = 0;
+  if (camStream) {
+    camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+  }
+  video.srcObject = null;
+  clearSkel();
+  endStroke();
+  mode = "idle";
+  el.startCam.disabled = false;
+  el.stopCam.disabled = true;
+  setBadge(el.bCam, "Camera uit", "muted");
+  setBadge(el.bHand, "Geen hand", "muted");
+  overlay.classList.remove("hidden");
+  setStatus("Camera gestopt. Start opnieuw, of teken met muis/vinger.");
+}
+
+function enterMouseMode() {
+  if (mode === "camera") stopCamera();
+  mode = "mouse";
+  overlay.classList.add("hidden");
+  setBadge(el.bCam, "Muis/touch", "ok");
+  setBadge(el.bHand, "—", "muted");
+  setStatus("Muis/touch-modus: teken op het vlak. Sleep om te tekenen, laat los om te pauzeren.");
+  document.getElementById("hint").textContent = "Muis/touch · sleep = tekenen · loslaten = pen omhoog";
+}
+
+function loop() {
+  rafId = requestAnimationFrame(loop);
+  if (mode !== "camera" || !handLandmarker || video.readyState < 2) return;
+  if (video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  const now = performance.now();
+  let result;
+  try {
+    result = handLandmarker.detectForVideo(video, now);
+  } catch (e) {
+    console.warn(e);
+    return;
+  }
+  clearSkel();
+  const hands = result.landmarks || [];
+  if (!hands.length) {
+    if (handSeen) {
+      handSeen = false;
+      setBadge(el.bHand, "Geen hand", "warn");
+    }
+    if (penDown) endStroke();
+    return;
+  }
+  handSeen = true;
+  setBadge(el.bHand, "Hand gevonden", "ok");
+  const lm = hands[0];
+  if (el.showSkel.checked) drawSkeleton(lm);
+
+  const tip = lm[TIP_INDEX];
+  const thumb = lm[TIP_THUMB];
+  const wrist = lm[WRIST];
+  const mid = lm[MCP_MIDDLE];
+  const handSize = Math.hypot(wrist.x - mid.x, wrist.y - mid.y) || 0.2;
+  const pinch = Math.hypot(tip.x - thumb.x, tip.y - thumb.y) / handSize;
+  const isPinching = pinch < 0.45;
+
+  const tSec = now / 1000;
+  let nx = tip.x, ny = tip.y;
+  if (filterX && filterY) {
+    nx = filterX.filter(tip.x, tSec);
+    ny = filterY.filter(tip.y, tSec);
+  }
+  const p = canvasPointFromNorm(nx, ny);
+  const color = el.color.value;
+  const width = +el.thick.value;
+
+  if (isPinching) {
+    if (penDown) endStroke();
+  } else {
+    if (!penDown) startStroke(p.x, p.y, color, width);
+    else addPoint(p.x, p.y);
+  }
+}
+
+function drawSkeleton(lm) {
+  const connections = HandLandmarker.HAND_CONNECTIONS || [];
+  skelCtx.save();
+  skelCtx.lineWidth = 2 * (skelCanvas.width / stage.getBoundingClientRect().width);
+  skelCtx.strokeStyle = "rgba(79,107,255,.85)";
+  skelCtx.fillStyle = "rgba(255,255,255,.9)";
+  for (const [a, b] of connections) {
+    const pa = canvasPointFromNorm(lm[a].x, lm[a].y);
+    const pb = canvasPointFromNorm(lm[b].x, lm[b].y);
+    skelCtx.beginPath();
+    skelCtx.moveTo(pa.x, pa.y);
+    skelCtx.lineTo(pb.x, pb.y);
+    skelCtx.stroke();
+  }
+  const r = 3.5 * (skelCanvas.width / stage.getBoundingClientRect().width);
+  for (const pt of lm) {
+    const p = canvasPointFromNorm(pt.x, pt.y);
+    skelCtx.beginPath();
+    skelCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    skelCtx.fill();
+  }
+  // highlight index tip
+  const tip = canvasPointFromNorm(lm[TIP_INDEX].x, lm[TIP_INDEX].y);
+  skelCtx.fillStyle = "#ff5a7a";
+  skelCtx.beginPath();
+  skelCtx.arc(tip.x, tip.y, r * 1.6, 0, Math.PI * 2);
+  skelCtx.fill();
+  skelCtx.restore();
+}
+
+// --- Mouse / touch fallback ---
+function pointerPos(ev) {
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  const src = ev.touches ? ev.touches[0] : ev;
+  return {
+    x: (src.clientX - rect.left) * scaleX,
+    y: (src.clientY - rect.top) * scaleY
+  };
+}
+
+function onPointerDown(ev) {
+  if (mode === "camera") return; // camera owns the pen
+  if (mode !== "mouse") enterMouseMode();
+  ev.preventDefault();
+  const p = pointerPos(ev);
+  startStroke(p.x, p.y, el.color.value, +el.thick.value);
+}
+
+function onPointerMove(ev) {
+  if (!penDown || mode === "camera") return;
+  ev.preventDefault();
+  const p = pointerPos(ev);
+  addPoint(p.x, p.y);
+}
+
+function onPointerUp(ev) {
+  if (mode === "camera") return;
+  if (penDown) endStroke();
+}
+
+stage.addEventListener("mousedown", onPointerDown);
+stage.addEventListener("mousemove", onPointerMove);
+window.addEventListener("mouseup", onPointerUp);
+stage.addEventListener("touchstart", onPointerDown, { passive: false });
+stage.addEventListener("touchmove", onPointerMove, { passive: false });
+window.addEventListener("touchend", onPointerUp);
+
+// --- SVG / PNG export ---
+function boundsOfStrokes() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const s of strokes) {
+    for (const p of s.points) {
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+    }
+  }
+  if (!isFinite(minX)) return null;
+  const pad = 20 * (drawCanvas.width / Math.max(1, stage.getBoundingClientRect().width));
+  return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
+}
+
+function pathD(points, ox, oy, scale) {
+  if (points.length < 2) return "";
+  // Chaikin-ish / simple smoothing via midpoints for nicer SVG
+  let pts = points.map(p => ({ x: (p.x - ox) * scale, y: (p.y - oy) * scale }));
+  if (pts.length > 3) {
+    const out = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      out.push({ x: 0.75 * a.x + 0.25 * b.x, y: 0.75 * a.y + 0.25 * b.y });
+      out.push({ x: 0.25 * a.x + 0.75 * b.x, y: 0.25 * a.y + 0.75 * b.y });
+    }
+    out.push(pts[pts.length - 1]);
+    pts = out;
+  }
+  let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const c = pts[i], n = pts[i + 1];
+    const mx = (c.x + n.x) / 2, my = (c.y + n.y) / 2;
+    d += ` Q ${c.x.toFixed(2)} ${c.y.toFixed(2)} ${mx.toFixed(2)} ${my.toFixed(2)}`;
+  }
+  const last = pts[pts.length - 1];
+  d += ` L ${last.x.toFixed(2)} ${last.y.toFixed(2)}`;
+  return d;
+}
+
+function buildSvg() {
+  const b = boundsOfStrokes();
+  if (!b) return null;
+  const wPx = b.maxX - b.minX;
+  const hPx = b.maxY - b.minY;
+  const widthMm = 100;
+  const heightMm = widthMm * (hPx / wPx);
+  const scale = widthMm / wPx; // px -> mm (viewBox in mm)
+  const cssScale = drawCanvas.width / Math.max(1, stage.getBoundingClientRect().width);
+  let paths = "";
+  for (const s of strokes) {
+    const d = pathD(s.points, b.minX, b.minY, scale);
+    if (!d) continue;
+    const sw = (s.width * cssScale * scale).toFixed(3);
+    paths += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>\n`;
+  }
+  const bg = el.svgWhite.checked
+    ? `<rect width="${widthMm}" height="${heightMm.toFixed(3)}" fill="#ffffff"/>\n`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${widthMm}mm" height="${heightMm.toFixed(3)}mm" viewBox="0 0 ${widthMm} ${heightMm.toFixed(3)}">\n` +
+    bg + paths + `</svg>\n`;
+}
+
+function downloadBlob(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function downloadSvg() {
+  const svg = buildSvg();
+  if (!svg) return;
+  downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), "lucht-tekening.svg");
+}
+
+function downloadPng() {
+  const b = boundsOfStrokes();
+  if (!b) return;
+  const pad = 0;
+  const w = Math.ceil(b.maxX - b.minX + pad);
+  const h = Math.ceil(b.maxY - b.minY + pad);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, w);
+  c.height = Math.max(1, h);
+  const ctx = c.getContext("2d");
+  if (el.svgWhite.checked) {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, c.width, c.height);
+  }
+  ctx.translate(-b.minX, -b.minY);
+  const scale = 1;
+  for (const s of strokes) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.width * (drawCanvas.width / Math.max(1, stage.getBoundingClientRect().width));
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+    ctx.stroke();
+  }
+  c.toBlob(blob => {
+    if (blob) downloadBlob(blob, "lucht-tekening.png");
+  }, "image/png");
+}
+
+// --- UI wiring ---
+el.thick.addEventListener("input", () => { el.thickV.textContent = el.thick.value + " px"; });
+el.startCam.addEventListener("click", () => startCamera());
+el.stopCam.addEventListener("click", () => stopCamera());
+el.mouseMode.addEventListener("click", () => enterMouseMode());
+el.undo.addEventListener("click", () => {
+  if (current) { current = null; penDown = false; }
+  else strokes.pop();
+  redrawAll();
+  updateButtons();
+  setBadge(el.bPen, "Pen omhoog", "muted");
+});
+el.clear.addEventListener("click", () => {
+  strokes = []; current = null; penDown = false;
+  redrawAll(); clearSkel(); updateButtons();
+  setBadge(el.bPen, "Pen omhoog", "muted");
+});
+el.dlSvg.addEventListener("click", downloadSvg);
+el.dlPng.addEventListener("click", downloadPng);
+el.showSkel.addEventListener("change", () => { if (!el.showSkel.checked) clearSkel(); });
+
+window.addEventListener("resize", () => {
+  const prev = { w: drawCanvas.width, h: drawCanvas.height };
+  // scale stroke points to new canvas size
+  resizeCanvases();
+  if (prev.w && drawCanvas.width) {
+    const sx = drawCanvas.width / prev.w, sy = drawCanvas.height / prev.h;
+    for (const s of strokes) for (const p of s.points) { p.x *= sx; p.y *= sy; }
+    if (current) for (const p of current.points) { p.x *= sx; p.y *= sy; }
+    redrawAll();
+  }
+});
+
+// Test / automation API
+const api = {
+  ensureModel,
+  enterMouseMode,
+  getStrokes: () => strokes,
+  setStrokes: (s) => { strokes = s; redrawAll(); updateButtons(); },
+  buildSvg,
+  downloadSvg,
+  downloadPng,
+  detectStill: async (img) => {
+    await ensureModel();
+    // Temporarily switch to IMAGE mode for still detection
+    await handLandmarker.setOptions({ runningMode: "IMAGE" });
+    const r = handLandmarker.detect(img);
+    await handLandmarker.setOptions({ runningMode: "VIDEO" });
+    return r;
+  },
+  isModelReady: () => modelReady,
+  version: "06-lucht-tekenen-1"
+};
+window.__luchtDemo = api;
+
+resizeCanvases();
+el.thickV.textContent = el.thick.value + " px";
+// Prefetch model in background so Start camera feels snappy
+ensureModel().catch(e => console.warn("prefetch model", e));
+</script>
+</body>
+</html>
