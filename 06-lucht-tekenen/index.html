@@ -90,7 +90,7 @@
       <h2>2. Tekenen</h2>
       <div class="stage-wrap">
         <div class="stage" id="stage">
-          <video id="video" playsinline muted></video>
+          <video id="video" playsinline webkit-playsinline muted autoplay></video>
           <canvas id="draw"></canvas>
           <canvas id="skel"></canvas>
           <div class="overlay" id="overlay">
@@ -186,6 +186,12 @@ let filterX = null;
 let filterY = null;
 let modelReady = false;
 let handSeen = false;
+let modelDelegate = "GPU";
+let lastTs = 0;
+let noHandSince = 0;
+let detectFailCount = 0;
+let pinchLatched = false;
+let rvfcId = 0;
 
 // --- One Euro Filter (Casiez et al.) ---
 class OneEuroFilter {
@@ -312,28 +318,68 @@ function clearSkel() {
   skelCtx.clearRect(0, 0, skelCanvas.width, skelCanvas.height);
 }
 
+async function createLandmarker(vision, delegate) {
+  return HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: MODEL_URL,
+      delegate
+    },
+    runningMode: "VIDEO",
+    numHands: 1,
+    minHandDetectionConfidence: 0.5,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+}
+
 async function ensureModel() {
   if (handLandmarker) return handLandmarker;
   setBadge(el.bModel, "Model laden…", "muted");
   setStatus("MediaPipe-model wordt geladen (±8 MB, eenmalig)…");
   const vision = await FilesetResolver.forVisionTasks(WASM_URL);
-  handLandmarker = await HandLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: MODEL_URL,
-      delegate: "GPU"
-    },
-    runningMode: "VIDEO",
-    numHands: 1,
-    minHandDetectionConfidence: 0.6,
-    minHandPresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5
+  let lastErr = null;
+  for (const delegate of ["GPU", "CPU"]) {
+    try {
+      handLandmarker = await createLandmarker(vision, delegate);
+      modelReady = true;
+      modelDelegate = delegate;
+      setBadge(el.bModel, "Model klaar (" + delegate + ")", "ok");
+      setStatus("Model geladen. Start de camera of teken met muis/vinger.");
+      window.__luchtDemo = api;
+      return handLandmarker;
+    } catch (e) {
+      lastErr = e;
+      console.warn("HandLandmarker " + delegate + " mislukt:", e);
+      handLandmarker = null;
+    }
+  }
+  throw lastErr || new Error("Model laden mislukt");
+}
+
+function waitForVideoReady(v, timeoutMs = 8000) {
+  if (v.readyState >= 2 && v.videoWidth > 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      cleanup();
+      reject(new Error("Camera gaf geen beeld (timeout)"));
+    }, timeoutMs);
+    const onReady = () => {
+      if (v.videoWidth > 0 && v.readyState >= 2) {
+        cleanup();
+        resolve();
+      }
+    };
+    const cleanup = () => {
+      clearTimeout(t);
+      v.removeEventListener("loadeddata", onReady);
+      v.removeEventListener("loadedmetadata", onReady);
+      v.removeEventListener("playing", onReady);
+    };
+    v.addEventListener("loadeddata", onReady);
+    v.addEventListener("loadedmetadata", onReady);
+    v.addEventListener("playing", onReady);
+    onReady();
   });
-  modelReady = true;
-  setBadge(el.bModel, "Model klaar", "ok");
-  setStatus("Model geladen. Start de camera of teken met muis/vinger.");
-  // Expose for tests
-  window.__luchtDemo = api;
-  return handLandmarker;
 }
 
 async function startCamera() {
@@ -349,38 +395,83 @@ async function startCamera() {
     enterMouseMode();
     return;
   }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setBadge(el.bCam, "Geen camera-API", "warn");
+    setStatus("Deze browser ondersteunt geen camera. Gebruik Chrome/Edge, of teken in muis/touch-modus.");
+    enterMouseMode();
+    return;
+  }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
-        facingMode: "user",
+        facingMode: { ideal: "user" },
         width: { ideal: 1280 },
         height: { ideal: 720 }
       }
     });
   } catch (e) {
     console.error(e);
+    const name = e && e.name ? e.name : "";
+    let msg = "Geen toegang tot de camera. Teken met muis/vinger, of geef cameratoestemming en probeer opnieuw.";
+    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      msg = "Cameratoestemming geweigerd. Sta de camera toe in je browser (slotje in de adresbalk) en klik opnieuw op Start camera.";
+    } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      msg = "Geen camera gevonden. Sluit een webcam aan, of teken in muis/touch-modus.";
+    } else if (name === "NotReadableError" || name === "TrackStartError") {
+      msg = "Camera is bezet door een andere app. Sluit die en probeer opnieuw.";
+    }
     setBadge(el.bCam, "Camera geweigerd", "warn");
-    setStatus("Geen toegang tot de camera. Teken met muis/vinger, of geef cameratoestemming en probeer opnieuw.");
+    setStatus(msg + " <code>" + (e.message || name || e) + "</code>");
     enterMouseMode();
     return;
   }
   video.srcObject = camStream;
-  await video.play();
+  video.muted = true;
+  video.playsInline = true;
+  try {
+    await video.play();
+  } catch (e) {
+    console.warn("video.play", e);
+  }
+  try {
+    await waitForVideoReady(video);
+  } catch (e) {
+    console.error(e);
+    setBadge(el.bCam, "Geen beeld", "warn");
+    setStatus("Camera startte, maar er kwam geen beeld. Probeer een andere browser (Chrome) of muis/touch-modus.");
+    stopCamera();
+    enterMouseMode();
+    return;
+  }
   mode = "camera";
   el.startCam.disabled = true;
   el.stopCam.disabled = false;
   setBadge(el.bCam, "Camera aan", "ok");
-  setStatus("Wijs met je wijsvinger. Knijp (duim + wijsvinger) om de pen op te tillen.");
+  setStatus("Houd je hand in beeld. Wijs met je wijsvinger om te tekenen; knijp (duim + wijsvinger) om te pauzeren.");
+  document.getElementById("hint").textContent = "Spiegelbeeld · knijp = pen omhoog · open = tekenen";
   filterX = new OneEuroFilter(1.2, 0.02, 1.0);
   filterY = new OneEuroFilter(1.2, 0.02, 1.0);
   lastVideoTime = -1;
+  lastTs = 0;
+  noHandSince = performance.now();
+  detectFailCount = 0;
+  pinchLatched = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  if (rvfcId && video.cancelVideoFrameCallback) {
+    try { video.cancelVideoFrameCallback(rvfcId); } catch (_) {}
+    rvfcId = 0;
+  }
   loop();
 }
 
 function stopCamera() {
   if (rafId) cancelAnimationFrame(rafId);
   rafId = 0;
+  if (rvfcId && video.cancelVideoFrameCallback) {
+    try { video.cancelVideoFrameCallback(rvfcId); } catch (_) {}
+    rvfcId = 0;
+  }
   if (camStream) {
     camStream.getTracks().forEach(t => t.stop());
     camStream = null;
@@ -407,67 +498,163 @@ function enterMouseMode() {
   document.getElementById("hint").textContent = "Muis/touch · sleep = tekenen · loslaten = pen omhoog";
 }
 
+function scheduleNextFrame() {
+  if (mode !== "camera") return;
+  if (typeof video.requestVideoFrameCallback === "function") {
+    rvfcId = video.requestVideoFrameCallback(() => {
+      rvfcId = 0;
+      loop();
+    });
+  } else {
+    rafId = requestAnimationFrame(loop);
+  }
+}
+
 function loop() {
-  rafId = requestAnimationFrame(loop);
-  if (mode !== "camera" || !handLandmarker || video.readyState < 2) return;
-  if (video.currentTime === lastVideoTime) return;
-  lastVideoTime = video.currentTime;
+  if (mode !== "camera" || !handLandmarker) return;
+  // Schedule the next frame first so a thrown error still keeps the loop alive.
+  scheduleNextFrame();
+  if (video.readyState < 2 || video.videoWidth < 2) {
+    setStatus("Camera starten… wachten op beeld…");
+    return;
+  }
+
+  // Prefer new frames, but never stall forever if currentTime is stuck (Safari quirk).
+  const ct = video.currentTime;
   const now = performance.now();
+  const timeAdvanced = ct !== lastVideoTime;
+  if (timeAdvanced) lastVideoTime = ct;
+  else if (now - lastTs < 32) return; // throttle duplicate-frame detects ~30fps
+
+  const ts = lastTs > 0 ? Math.max(now, lastTs + 1) : now;
+  lastTs = ts;
+
   let result;
   try {
-    result = handLandmarker.detectForVideo(video, now);
+    result = handLandmarker.detectForVideo(video, ts);
+    detectFailCount = 0;
   } catch (e) {
-    console.warn(e);
-    return;
-  }
-  clearSkel();
-  const hands = result.landmarks || [];
-  if (!hands.length) {
-    if (handSeen) {
-      handSeen = false;
-      setBadge(el.bHand, "Geen hand", "warn");
+    console.warn("detectForVideo", e);
+    detectFailCount++;
+    if (detectFailCount === 1 || detectFailCount % 60 === 0) {
+      setStatus("Detectie-fout (" + detectFailCount + "×). Probeer de pagina te herladen, of gebruik muis/touch. <code>" + (e.message || e) + "</code>");
+      setBadge(el.bHand, "Detectie-fout", "warn");
     }
-    if (penDown) endStroke();
+    // After repeated GPU failures, try rebuilding on CPU once
+    if (detectFailCount === 15 && modelDelegate === "GPU") {
+      (async () => {
+        try {
+          setStatus("GPU-detectie faalt — opnieuw laden op CPU…");
+          const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+          const next = await createLandmarker(vision, "CPU");
+          try { handLandmarker.close?.(); } catch (_) {}
+          handLandmarker = next;
+          modelDelegate = "CPU";
+          setBadge(el.bModel, "Model klaar (CPU)", "ok");
+          detectFailCount = 0;
+          lastTs = 0;
+        } catch (err) {
+          console.error(err);
+        }
+      })();
+    }
     return;
   }
-  handSeen = true;
-  setBadge(el.bHand, "Hand gevonden", "ok");
-  const lm = hands[0];
-  if (el.showSkel.checked) drawSkeleton(lm);
 
-  const tip = lm[TIP_INDEX];
-  const thumb = lm[TIP_THUMB];
-  const wrist = lm[WRIST];
-  const mid = lm[MCP_MIDDLE];
-  const handSize = Math.hypot(wrist.x - mid.x, wrist.y - mid.y) || 0.2;
-  const pinch = Math.hypot(tip.x - thumb.x, tip.y - thumb.y) / handSize;
-  const isPinching = pinch < 0.45;
+  try {
+    clearSkel();
+    const hands = result.landmarks || [];
+    if (!hands.length) {
+      if (handSeen) {
+        handSeen = false;
+        setBadge(el.bHand, "Geen hand", "warn");
+      }
+      if (performance.now() - noHandSince > 1200) {
+        setStatus("Geen hand gezien – houd je hand in beeld, met goed licht en open palm naar de camera.");
+      }
+      if (penDown) endStroke();
+      pinchLatched = false;
+      return;
+    }
+    noHandSince = performance.now();
+    handSeen = true;
+    setBadge(el.bHand, "Hand gevonden", "ok");
+    const lm = hands[0];
 
-  const tSec = now / 1000;
-  let nx = tip.x, ny = tip.y;
-  if (filterX && filterY) {
-    nx = filterX.filter(tip.x, tSec);
-    ny = filterY.filter(tip.y, tSec);
+    const tip = lm[TIP_INDEX];
+    const thumb = lm[TIP_THUMB];
+    const wrist = lm[WRIST];
+    const mid = lm[MCP_MIDDLE];
+    const handSize = Math.hypot(wrist.x - mid.x, wrist.y - mid.y) || 0.2;
+    const pinch = Math.hypot(tip.x - thumb.x, tip.y - thumb.y) / handSize;
+    // Hysteresis: easier to start drawing than to stop
+    if (pinchLatched) {
+      if (pinch > 0.55) pinchLatched = false;
+    } else {
+      if (pinch < 0.38) pinchLatched = true;
+    }
+    const isPinching = pinchLatched;
+
+    const tSec = ts / 1000;
+    let nx = tip.x, ny = tip.y;
+    if (filterX && filterY) {
+      nx = filterX.filter(tip.x, tSec);
+      ny = filterY.filter(tip.y, tSec);
+    }
+    const p = canvasPointFromNorm(nx, ny);
+    const color = el.color.value;
+    const width = +el.thick.value;
+
+    if (el.showSkel.checked) drawSkeleton(lm);
+    else drawTip(p, isPinching); // always show fingertip so you see tracking works
+
+    if (isPinching) {
+      if (penDown) endStroke();
+      setStatus("Pen omhoog (knijp). Open je hand / spreid duim en wijsvinger om te tekenen.");
+    } else {
+      if (!penDown) startStroke(p.x, p.y, color, width);
+      else addPoint(p.x, p.y);
+      setStatus("Aan het tekenen… knijp om te pauzeren.");
+    }
+  } catch (e) {
+    console.warn("frame process", e);
+    setBadge(el.bHand, "Teken-fout", "warn");
+    setStatus("Fout tijdens tekenen: <code>" + (e.message || e) + "</code>");
   }
-  const p = canvasPointFromNorm(nx, ny);
-  const color = el.color.value;
-  const width = +el.thick.value;
+}
 
-  if (isPinching) {
-    if (penDown) endStroke();
-  } else {
-    if (!penDown) startStroke(p.x, p.y, color, width);
-    else addPoint(p.x, p.y);
-  }
+function connectionPair(c) {
+  if (Array.isArray(c)) return [c[0], c[1]];
+  if (c && typeof c === "object") return [c.start, c.end];
+  return null;
+}
+
+function drawTip(p, pinching) {
+  const scale = skelCanvas.width / Math.max(1, stage.getBoundingClientRect().width);
+  const r = (pinching ? 5 : 7) * scale;
+  skelCtx.save();
+  skelCtx.fillStyle = pinching ? "rgba(255,200,80,.95)" : "#ff5a7a";
+  skelCtx.beginPath();
+  skelCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  skelCtx.fill();
+  skelCtx.strokeStyle = "rgba(255,255,255,.9)";
+  skelCtx.lineWidth = 2 * scale;
+  skelCtx.stroke();
+  skelCtx.restore();
 }
 
 function drawSkeleton(lm) {
   const connections = HandLandmarker.HAND_CONNECTIONS || [];
   skelCtx.save();
-  skelCtx.lineWidth = 2 * (skelCanvas.width / stage.getBoundingClientRect().width);
+  const scale = skelCanvas.width / Math.max(1, stage.getBoundingClientRect().width);
+  skelCtx.lineWidth = 2 * scale;
   skelCtx.strokeStyle = "rgba(79,107,255,.85)";
   skelCtx.fillStyle = "rgba(255,255,255,.9)";
-  for (const [a, b] of connections) {
+  for (const c of connections) {
+    const pair = connectionPair(c);
+    if (!pair) continue;
+    const [a, b] = pair;
+    if (lm[a] == null || lm[b] == null) continue;
     const pa = canvasPointFromNorm(lm[a].x, lm[a].y);
     const pb = canvasPointFromNorm(lm[b].x, lm[b].y);
     skelCtx.beginPath();
@@ -475,7 +662,7 @@ function drawSkeleton(lm) {
     skelCtx.lineTo(pb.x, pb.y);
     skelCtx.stroke();
   }
-  const r = 3.5 * (skelCanvas.width / stage.getBoundingClientRect().width);
+  const r = 3.5 * scale;
   for (const pt of lm) {
     const p = canvasPointFromNorm(pt.x, pt.y);
     skelCtx.beginPath();
@@ -689,7 +876,10 @@ const api = {
     return r;
   },
   isModelReady: () => modelReady,
-  version: "06-lucht-tekenen-1"
+  getMode: () => mode,
+  getDelegate: () => modelDelegate,
+  getCurrent: () => current,
+  version: "06-lucht-tekenen-2"
 };
 window.__luchtDemo = api;
 

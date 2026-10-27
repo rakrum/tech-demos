@@ -8,13 +8,15 @@ Alles draait in je eigen browser. Camerabeelden blijven op jouw computer: er wor
 
 1. Open de live link: https://tech-demos-henna.vercel.app/06-lucht-tekenen/
 2. Klik op **Start camera** en geef toestemming. (Op de telefoon gebruikt hij de selfiecamera.)
-3. Wijs met je **wijsvinger**. Waar de tip zit, tekent de pen.
+3. Wijs met je **wijsvinger**. Waar de tip zit, tekent de pen. Je ziet een roze punt (of het handgeraamte) als tracking werkt.
 4. **Knijp** (duim + wijsvinger) om te pauzeren; open weer voor een nieuwe lijn.
 5. Kies kleur en lijndikte, of zet het handgeraamte uit.
 6. **Ongedaan** verwijdert de laatste lijn; **Wissen** maakt alles leeg.
 7. Download **SVG (100 mm)** of **PNG**. Bij SVG kun je kiezen voor een witte of doorzichtige achtergrond.
 
 Werkt de camera niet (of wil je even snel testen)? Kies **Muis/touch-modus** en teken met muis of vinger op het vlak.
+
+Na een update: doe een **harde refresh** (Ctrl/Cmd+Shift+R) zodat je browser de nieuwe pagina laadt, en sta de camera toe als de browser ernaar vraagt.
 
 ## Tip: xTool Creative Space / UV-printer
 
@@ -26,7 +28,7 @@ Werkt de camera niet (of wil je even snel testen)? Kies **Muis/touch-modus** en 
 ## Beperkingen
 
 - De eerste keer downloadt je browser het model (±8 MB) en de MediaPipe-wasm. Daarna staat het in de cache.
-- Werkt het best in **Chrome of Edge**. Op oudere telefoons kan de herkenning trager zijn.
+- Werkt het best in **Chrome of Edge**. Safari kan trager zijn; de demo valt automatisch terug van GPU naar CPU als dat nodig is.
 - Bij slecht licht, handschoenen of een drukke achtergrond mist hij je hand sneller.
 - Heel snelle bewegingen kunnen de lijn iets laten "slepen"; de demo filtert dat met een One Euro Filter, maar is geen professionele tekentablet.
 - Camerabeelden blijven lokaal; MediaPipe kan wel anonieme gebruiksstatistieken naar Google sturen (zoals bij hun web-SDK gebruikelijk is). Je tekening zelf wordt niet geüpload.
