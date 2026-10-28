@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>3D-fotoscènes (Spark) · Tech demo 07</title>
+<style>
+  :root { --bg:#0d1020; --panel:rgba(18,22,40,.88); --fg:#eef1ff; --muted:#9aa3c7; --acc:#6b8cff; --acc2:#ff5fa2; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; overflow:hidden; }
+  #view { position:fixed; inset:0; }
+  #view canvas { display:block; width:100%; height:100%; touch-action:none; }
+  #ui { position:fixed; left:12px; top:12px; width:min(380px, calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:auto;
+        background:var(--panel); border-radius:16px; padding:14px; backdrop-filter:blur(6px); box-shadow:0 8px 30px rgba(0,0,0,.4); }
+  #ui.collapsed .body { display:none; }
+  h1 { font-size:18px; margin:0 0 4px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  h1 small { font-weight:400; color:var(--muted); font-size:12px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .lbl { font-size:12px; color:var(--muted); margin:12px 0 4px; text-transform:uppercase; letter-spacing:.04em; }
+  button, .btn, select { font:inherit; font-size:15px; border:0; border-radius:12px; padding:11px 14px; cursor:pointer; color:var(--fg); background:#2a3156; min-height:44px; }
+  button:hover, .btn:hover { background:#353d6b; }
+  button.primary { background:var(--acc); color:#fff; font-weight:600; }
+  button.pink { background:var(--acc2); color:#fff; font-weight:600; }
+  button[aria-pressed="true"] { outline:2px solid var(--acc); background:#33407a; }
+  button.scene { flex:1 1 calc(50% - 8px); text-align:left; }
+  button.scene[aria-pressed="true"] { outline:2px solid var(--acc2); }
+  select { width:100%; }
+  input[type=range] { width:100%; }
+  #toggleUi { min-height:32px; padding:4px 10px; font-size:13px; }
+  #status { font-size:14px; line-height:1.4; margin-top:6px; min-height:20px; }
+  #status.err { color:#ff9a9a; }
+  #stats { position:fixed; right:10px; bottom:8px; font-size:12px; color:var(--muted); background:rgba(0,0,0,.35); padding:3px 8px; border-radius:8px; pointer-events:none; }
+  .hint { font-size:12.5px; color:var(--muted); line-height:1.45; }
+  kbd { background:#2a3156; border-radius:4px; padding:0 4px; font-size:12px; }
+  #drop { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(107,140,255,.25); border:4px dashed var(--acc); font-size:26px; font-weight:600; z-index:20; pointer-events:none; }
+  body.dragging #drop { display:flex; }
+  /* SBS-modus: alle UI weg */
+  body.sbs #ui, body.sbs #stats { display:none; }
+  #sbsHint { position:fixed; inset:0; display:none; pointer-events:none; z-index:30; }
+  body.sbs #sbsHint { display:flex; }
+  #sbsHint > div { flex:1; display:flex; align-items:flex-end; justify-content:center; padding-bottom:6vh; }
+  #sbsHint span { display:inline-block; background:rgba(0,0,0,.65); color:#fff; padding:10px 16px; border-radius:12px; font-size:18px; text-align:center; max-width:90%; transition:opacity .8s; }
+  body.sbs.half #sbsHint span { transform:scaleX(.5); max-width:180%; }
+  #sbsHint.fade span { opacity:0; }
+  #xrBtn { display:none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "@sparkjsdev/spark": "https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@2.4.0/dist/spark.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="drop">Laat los om je scan te openen</div>
+<div id="sbsHint"><div><span>Houd de helderheidsknop op je Rokid-bril ±2 s ingedrukt voor 3D<br><small>Esc of tik om te stoppen</small></span></div><div><span>Houd de helderheidsknop op je Rokid-bril ±2 s ingedrukt voor 3D<br><small>Esc of tik om te stoppen</small></span></div></div>
+<div id="stats"></div>
+
+<div id="ui">
+  <h1><span>3D-fotoscènes <small>Spark · demo 07</small></span><button id="toggleUi" title="Paneel in-/uitklappen">–</button></h1>
+  <div class="body">
+    <div id="status">Bezig met opstarten…</div>
+
+    <div class="lbl">Voorbeeldscène</div>
+    <div class="row" id="scenes"></div>
+
+    <div class="lbl">Je eigen scan</div>
+    <div class="row">
+      <label class="btn" for="file" style="flex:1;text-align:center">📂 Bestand kiezen</label>
+      <input id="file" type="file" accept=".ply,.spz,.splat,.ksplat,.sog,.zip" hidden>
+      <button id="flip" title="Scan staat op zijn kop? Draai hem om.">↕ Omdraaien</button>
+    </div>
+    <div class="hint">Of sleep een <b>.ply</b>, <b>.spz</b>, <b>.splat</b> of <b>.ksplat</b> op deze pagina. Het bestand blijft op je eigen apparaat; er wordt niets geüpload.</div>
+
+    <div class="lbl">Bekijken</div>
+    <div class="row">
+      <button id="autorot" aria-pressed="false">⟳ Auto-draaien</button>
+      <button id="reset">↺ Beeld terug</button>
+      <button id="zin">Zoom +</button><button id="zout">Zoom −</button>
+    </div>
+    <div class="hint">Slepen = draaien · scrollen/knijpen = zoomen · rechts slepen of twee vingers = schuiven · <kbd>W</kbd><kbd>S</kbd>/<kbd>↑</kbd><kbd>↓</kbd> zoomen · <kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> draaien · <kbd>Q</kbd><kbd>E</kbd> kantelen</div>
+
+    <div class="lbl">Kwaliteit (aantal splats)</div>
+    <select id="quality">
+      <option value="low">Zuinig — Rokid Station / telefoon</option>
+      <option value="mid">Normaal</option>
+      <option value="high">Hoog — snelle computer</option>
+    </select>
+
+    <div class="lbl">Rokid AR-bril</div>
+    <div class="row">
+      <button id="sbsBtn" class="pink" style="flex:1">🕶 Rokid 3D (SBS)</button>
+      <button id="xrBtn" class="primary">VR (proef)</button>
+    </div>
+    <label class="hint" for="eye">Oogafstand: <b id="eyeVal">6,3 cm</b></label>
+    <input id="eye" type="range" min="0" max="20" step="0.1" value="6.3">
+    <div class="row">
+      <button id="swap" aria-pressed="false">⇄ Links/rechts wisselen</button>
+      <select id="sbsMode" style="flex:1;width:auto">
+        <option value="auto">Automatisch</option>
+        <option value="half">Half-SBS (1920 breed)</option>
+        <option value="full">Full-SBS (3840 breed)</option>
+      </select>
+    </div>
+    <div class="hint">Klik op <b>Rokid 3D</b>: het beeld wordt twee keer naast elkaar getekend, één per oog. Houd daarna de helderheidsknop op het rechterpootje van je bril ±2 s ingedrukt om de 3D-stand aan te zetten. Stoppen: <kbd>Esc</kbd> of één keer tikken. In 3D-modus: <kbd>[</kbd> <kbd>]</kbd> oogafstand, <kbd>X</kbd> wisselen.</div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { SparkRenderer, SplatMesh, SparkXr } from "@sparkjsdev/spark";
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status");
+function setStatus(msg, isErr = false) { statusEl.textContent = msg; statusEl.classList.toggle("err", isErr); }
+window.__demo = { errors: [] };
+
+// Voorbeeldscènes: officiële Spark-voorbeelden, live geladen vanaf sparkjs.dev
+const SCENES = [
+  { id: "robot",     name: "🤖 Robothoofd",   url: "https://sparkjs.dev/assets/splats/robot-head.spz", mb: 1.2, front: -1 },
+  { id: "penguin",   name: "🐧 Pinguïn",      url: "https://sparkjs.dev/assets/splats/penguin.spz",    mb: 2.5 },
+  { id: "butterfly", name: "🦋 Vlinder",      url: "https://sparkjs.dev/assets/splats/butterfly.spz",  mb: 4.0 },
+  { id: "fireplace", name: "🔥 Open haard",   url: "https://sparkjs.dev/assets/splats/fireplace.spz",  mb: 4.4 },
+];
+
+// ---------- Renderer ----------
+const isAndroid = /Android/i.test(navigator.userAgent);
+const isMobile = isAndroid || /iPhone|iPad|Mobile/i.test(navigator.userAgent);
+const QUALITY = {
+  low:  { lodSplatScale: 0.35, maxDpr: 1,   maxStdDev: Math.sqrt(5) },
+  mid:  { lodSplatScale: 1.0,  maxDpr: 1.5, maxStdDev: Math.sqrt(8) },
+  high: { lodSplatScale: 2.0,  maxDpr: 2,   maxStdDev: Math.sqrt(8) },
+};
+$("quality").value = isMobile ? "low" : "mid";
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "high-performance" });
+} catch (e) {
+  setStatus("Je browser ondersteunt geen WebGL2. Probeer Chrome of Safari (nieuwste versie).", true);
+  throw e;
+}
+renderer.setClearColor(0x0d1020, 1);
+$("view").appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 1000);
+camera.position.set(0, 0, 3);
+const spark = new SparkRenderer({ renderer, maxStdDev: QUALITY[$("quality").value].maxStdDev });
+scene.add(spark);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotateSpeed = 1.5;
+controls.zoomToCursor = false;
+
+function applyQuality() {
+  const q = QUALITY[$("quality").value];
+  spark.lodSplatScale = q.lodSplatScale;
+  spark.maxStdDev = q.maxStdDev;
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, q.maxDpr));
+  resize();
+}
+$("quality").onchange = () => { applyQuality(); setStatus(statusEl.dataset.base || "Kwaliteit aangepast."); };
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = w + "px";
+  renderer.domElement.style.height = h + "px";
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+applyQuality();
+
+// ---------- Scène laden ----------
+let current = null;      // huidige SplatMesh
+let currentInfo = null;  // { flip }
+let home = { target: new THREE.Vector3(), pos: new THREE.Vector3(0, 0, 3) };
+let loadToken = 0;
+
+function sceneButtons() {
+  const wrap = $("scenes");
+  for (const s of SCENES) {
+    const b = document.createElement("button");
+    b.className = "scene"; b.textContent = s.name; b.dataset.id = s.id; b.setAttribute("aria-pressed", "false");
+    b.onclick = () => loadScene(s);
+    wrap.appendChild(b);
+  }
+}
+function markScene(id) { for (const b of document.querySelectorAll("button.scene")) b.setAttribute("aria-pressed", String(b.dataset.id === id)); }
+
+function fmtNum(n) { return n >= 1e6 ? (n / 1e6).toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " miljoen" : Math.round(n / 1000).toLocaleString("nl-NL") + " duizend"; }
+
+// Robuust midden + grootte (negeert losse "zweefsplats" aan de randen)
+function splatSource(mesh) {
+  const cands = [mesh.packedSplats, mesh.extSplats, mesh.packedSplats?.lodSplats, mesh.extSplats?.lodSplats];
+  return cands.find((c) => c && (c.numSplats ?? 0) > 0) || null;
+}
+function splatCount(mesh) { return splatSource(mesh)?.numSplats ?? 0; }
+function robustFrame(mesh) {
+  const xs = [], ys = [], zs = [];
+  const src = splatSource(mesh);
+  if (!src) return null;
+  const n = src.numSplats;
+  const step = Math.max(1, Math.floor(n / 50000));
+  let i = 0;
+  src.forEachSplat((idx, c) => { if ((i++ % step) === 0) { xs.push(c.x); ys.push(c.y); zs.push(c.z); } });
+  if (xs.length < 10) return null;
+  const pct = (a, p) => { a.sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.max(0, Math.floor(p * (a.length - 1))))]; };
+  const lo = new THREE.Vector3(pct(xs, .05), pct(ys, .05), pct(zs, .05));
+  const hi = new THREE.Vector3(pct(xs, .95), pct(ys, .95), pct(zs, .95));
+  return new THREE.Box3(lo, hi);
+}
+
+function frameMesh(mesh, front = 1) {
+  mesh.updateMatrixWorld(true);
+  let box = null;
+  try { box = robustFrame(mesh); } catch (e) { box = null; }
+  if (!box) { try { box = mesh.getBoundingBox(true); } catch (e) { box = new THREE.Box3(new THREE.Vector3(-1,-1,-1), new THREE.Vector3(1,1,1)); } }
+  box.applyMatrix4(mesh.matrixWorld);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const radius = Math.max(0.05, size.length() / 2);
+  const dist = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 0.9;
+  home.target.copy(center);
+  home.pos.copy(center).add(new THREE.Vector3(0, radius * 0.25, dist * front));
+  camera.near = Math.max(0.001, dist / 200);
+  camera.far = Math.max(100, dist * 50);
+  camera.updateProjectionMatrix();
+  controls.minDistance = radius * 0.05;
+  controls.maxDistance = dist * 8;
+  resetView();
+}
+function resetView() { controls.target.copy(home.target); camera.position.copy(home.pos); controls.update(); }
+
+async function showMesh(makeMesh, label, flip, sceneId, front = 1) {
+  const token = ++loadToken;
+  markScene(sceneId);
+  setStatus(`${label} wordt geladen…`);
+  let mesh;
+  try {
+    mesh = makeMesh((p) => { if (token === loadToken && p?.total) setStatus(`${label} wordt geladen… ${Math.round(100 * p.loaded / p.total)}%`); });
+    if (flip) mesh.quaternion.set(1, 0, 0, 0);
+    await mesh.initialized;
+  } catch (e) {
+    console.warn(e);
+    if (token === loadToken) setStatus(`Kon "${label}" niet openen. Is het een geldig splat-bestand (.ply, .spz, .splat, .ksplat)? (${e?.message || e})`, true);
+    mesh?.dispose?.();
+    return;
+  }
+  if (token !== loadToken) { mesh.dispose?.(); return; }
+  if (current) { scene.remove(current); current.dispose?.(); }
+  current = mesh; currentInfo = { flip, front };
+  scene.add(mesh);
+  frameMesh(mesh, front);
+  const n = splatCount(mesh);
+  const base = `Klaar: ${label}${n ? ` (${fmtNum(n)} splats)` : ""}. Sleep om te draaien.`;
+  statusEl.dataset.base = base;
+  setStatus(base);
+  window.__demo.loaded = label; window.__demo.numSplats = n;
+}
+
+function loadScene(s) {
+  return showMesh((onProgress) => new SplatMesh({ url: s.url, lod: true, onProgress }), s.name.replace(/^\S+\s/, ""), true, s.id, s.front ?? 1);
+}
+
+async function loadFile(file) {
+  if (!file) return;
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (!["ply", "spz", "splat", "ksplat", "sog", "zip"].includes(ext)) {
+    setStatus(`"${file.name}" is geen splat-bestand. Kies een .ply, .spz, .splat of .ksplat.`, true); return;
+  }
+  if (file.size > 600e6) { setStatus("Dit bestand is groter dan 600 MB; dat wordt te zwaar voor de browser.", true); return; }
+  setStatus(`${file.name} wordt gelezen…`);
+  let bytes;
+  try { bytes = new Uint8Array(await file.arrayBuffer()); } catch (e) { setStatus("Kon het bestand niet lezen.", true); return; }
+  await showMesh(() => new SplatMesh({ fileBytes: bytes, fileName: file.name, lod: true }), file.name, true, null);
+}
+window.__demo.loadFile = loadFile;
+
+$("file").onchange = (e) => { loadFile(e.target.files[0]); e.target.value = ""; };
+let dragDepth = 0;
+addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+addEventListener("dragleave", (e) => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove("dragging"); });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging"); loadFile(e.dataTransfer?.files?.[0]); });
+
+$("flip").onclick = () => {
+  if (!current) return;
+  currentInfo.flip = !currentInfo.flip;
+  if (currentInfo.flip) current.quaternion.set(1, 0, 0, 0); else current.quaternion.identity();
+  frameMesh(current, currentInfo.front);
+};
+
+// ---------- Bediening ----------
+$("autorot").onclick = () => { controls.autoRotate = !controls.autoRotate; $("autorot").setAttribute("aria-pressed", String(controls.autoRotate)); };
+$("reset").onclick = resetView;
+function dolly(f) { const v = camera.position.clone().sub(controls.target).multiplyScalar(f); const d = THREE.MathUtils.clamp(v.length(), controls.minDistance, controls.maxDistance); camera.position.copy(controls.target).add(v.setLength(d)); }
+$("zin").onclick = () => dolly(0.8);
+$("zout").onclick = () => dolly(1.25);
+$("toggleUi").onclick = () => { const c = $("ui").classList.toggle("collapsed"); $("toggleUi").textContent = c ? "+" : "–"; };
+
+const keys = new Set();
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  const k = e.key.toLowerCase();
+  if (["w","a","s","d","q","e","arrowup","arrowdown","arrowleft","arrowright"].includes(k)) { keys.add(k); e.preventDefault(); }
+  if (k === "escape" && sbs.on) exitSbs();
+  if (sbs.on && k === "[") setEye(Math.max(0, eyeCm - 0.5));
+  if (sbs.on && k === "]") setEye(Math.min(20, eyeCm + 0.5));
+  if (sbs.on && k === "x") toggleSwap();
+});
+addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => keys.clear());
+const _sph = new THREE.Spherical();
+function keyMove(dt) {
+  if (!keys.size) return;
+  const off = camera.position.clone().sub(controls.target);
+  _sph.setFromVector3(off);
+  const rot = 1.4 * dt;
+  if (keys.has("a") || keys.has("arrowleft")) _sph.theta -= rot;
+  if (keys.has("d") || keys.has("arrowright")) _sph.theta += rot;
+  if (keys.has("q")) _sph.phi = Math.max(0.05, _sph.phi - rot);
+  if (keys.has("e")) _sph.phi = Math.min(Math.PI - 0.05, _sph.phi + rot);
+  let r = _sph.radius;
+  if (keys.has("w") || keys.has("arrowup")) r *= Math.pow(0.4, dt);
+  if (keys.has("s") || keys.has("arrowdown")) r *= Math.pow(2.5, dt);
+  _sph.radius = THREE.MathUtils.clamp(r, controls.minDistance, controls.maxDistance);
+  camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(_sph));
+}
+
+// ---------- Rokid 3D (side-by-side) ----------
+const stereo = new THREE.StereoCamera();
+// Eigen oog-camera's (met gewone position/quaternion), zodat Spark de juiste kijkpositie per oog ziet
+const eyeL = new THREE.PerspectiveCamera(), eyeR = new THREE.PerspectiveCamera();
+eyeL.viewport = new THREE.Vector4(); eyeR.viewport = new THREE.Vector4();
+const arrayCam = new THREE.ArrayCamera([eyeL, eyeR]);
+const _s = new THREE.Vector3();
+function copyEye(src, dst) {
+  src.matrixWorld.decompose(dst.position, dst.quaternion, _s);
+  dst.near = camera.near; dst.far = camera.far;
+  dst.projectionMatrix.copy(src.projectionMatrix);
+  dst.projectionMatrixInverse.copy(src.projectionMatrixInverse);
+  dst.updateMatrixWorld(true);
+}
+const sbs = { on: false, swap: false, full: false };
+let eyeCm = 6.3;
+function setEye(v) { eyeCm = v; $("eye").value = v; $("eyeVal").textContent = v.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " cm"; }
+$("eye").oninput = (e) => setEye(parseFloat(e.target.value));
+function toggleSwap() { sbs.swap = !sbs.swap; $("swap").setAttribute("aria-pressed", String(sbs.swap)); }
+$("swap").onclick = toggleSwap;
+
+function decideFull() {
+  const m = $("sbsMode").value;
+  if (m === "full") return true;
+  if (m === "half") return false;
+  // Automatisch: full-SBS alleen als het scherm zelf al dubbel breed is (bijv. 3840×1080)
+  const w = innerWidth * (devicePixelRatio || 1), h = innerHeight * (devicePixelRatio || 1);
+  return w >= 3840 && w / h >= 3;
+}
+let hintTimer;
+async function enterSbs() {
+  if (sbs.on) return;
+  sbs.on = true;
+  document.body.classList.add("sbs");
+  try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: "hide" }); }
+  catch (e) { /* Safari op iPhone: geen fullscreen, gewoon het hele venster gebruiken */ }
+  sbs.full = decideFull();
+  document.body.classList.toggle("half", !sbs.full);
+  resize();
+  $("sbsHint").classList.remove("fade");
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => $("sbsHint").classList.add("fade"), 6000);
+  window.__demo.sbs = true;
+}
+function exitSbs() {
+  if (!sbs.on) return;
+  sbs.on = false;
+  document.body.classList.remove("sbs", "half");
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  resize();
+  window.__demo.sbs = false;
+}
+$("sbsBtn").onclick = enterSbs;
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && sbs.on) exitSbs(); });
+// Tik (zonder slepen) = stoppen
+let down = null;
+renderer.domElement.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!sbs.on || !down) return;
+  const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t;
+  if (moved < 8 && dt < 300) exitSbs();
+  down = null;
+});
+
+function renderSbs() {
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const halfW = Math.floor(size.x / 2);
+  // Half-SBS: elk oog krijgt het beeld van het hele scherm, horizontaal samengeperst (de bril rekt het weer uit).
+  // Full-SBS: elk oog krijgt een eigen, onvervormde helft.
+  camera.aspect = size.x / size.y;
+  camera.updateProjectionMatrix();
+  stereo.aspect = sbs.full ? 0.5 : 1;
+  stereo.eyeSep = eyeCm / 100;
+  camera.focus = Math.max(0.05, camera.position.distanceTo(controls.target));
+  camera.updateMatrixWorld();
+  stereo.update(camera);
+  copyEye(sbs.swap ? stereo.cameraR : stereo.cameraL, eyeL);
+  copyEye(sbs.swap ? stereo.cameraL : stereo.cameraR, eyeR);
+  eyeL.viewport.set(0, 0, halfW, size.y);
+  eyeR.viewport.set(halfW, 0, size.x - halfW, size.y);
+  arrayCam.position.copy(camera.position); arrayCam.quaternion.copy(camera.quaternion);
+  arrayCam.projectionMatrix.copy(camera.projectionMatrix); arrayCam.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
+  arrayCam.updateMatrixWorld(true);
+  renderer.render(scene, arrayCam);
+}
+
+// ---------- VR (proef) via WebXR ----------
+(async () => {
+  try {
+    if (navigator.xr && await navigator.xr.isSessionSupported("immersive-vr")) {
+      const btn = $("xrBtn");
+      new SparkXr({ renderer, mode: "vr", element: btn, allowMobileXr: true,
+        onReady: (ok) => { if (ok) { btn.style.display = ""; btn.classList.remove("hidden"); } },
+        onEnterXr: () => setStatus("VR-proef gestart."), onExitXr: () => setStatus(statusEl.dataset.base || "VR gestopt.") });
+    }
+  } catch (e) { console.warn("WebXR niet beschikbaar", e); }
+})();
+
+// ---------- Loop ----------
+const clock = new THREE.Clock();
+let frames = 0, fpsT = 0;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(0.1, clock.getDelta());
+  if (!renderer.xr.isPresenting) {
+    keyMove(dt);
+    controls.update(dt);
+  }
+  if (sbs.on && !renderer.xr.isPresenting) renderSbs();
+  else {
+    if (Math.abs(camera.aspect - innerWidth / innerHeight) > 1e-3) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+    renderer.render(scene, camera);
+  }
+  frames++; fpsT += dt;
+  if (fpsT > 1) { $("stats").textContent = `${Math.round(frames / fpsT)} fps${current ? " · " + fmtNum(splatCount(current)) + " splats" : ""}`; frames = 0; fpsT = 0; }
+  window.__demo.frames = (window.__demo.frames || 0) + 1;
+});
+
+sceneButtons();
+loadScene(SCENES[0]);
+</script>
+</body>
+</html>
