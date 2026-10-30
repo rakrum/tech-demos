@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>360°-foto's (Photo Sphere Viewer) · Tech demo 08</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5.15.1/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/markers-plugin@5.15.1/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/virtual-tour-plugin@5.15.1/index.css">
+<style>
+  :root { --bg:#0d1020; --panel:rgba(18,22,40,.88); --fg:#eef1ff; --muted:#9aa3c7; --acc:#6b8cff; --acc2:#ff5fa2; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; overflow:hidden; }
+  #viewer { position:fixed; inset:0; }
+  #ui { position:fixed; left:12px; top:12px; width:min(360px, calc(100vw - 24px)); max-height:calc(100vh - 80px); overflow:auto; z-index:50;
+        background:var(--panel); border-radius:16px; padding:14px; backdrop-filter:blur(6px); box-shadow:0 8px 30px rgba(0,0,0,.4); }
+  #ui.collapsed .body { display:none; }
+  h1 { font-size:18px; margin:0 0 4px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  h1 small { font-weight:400; color:var(--muted); font-size:12px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .lbl { font-size:12px; color:var(--muted); margin:12px 0 4px; text-transform:uppercase; letter-spacing:.04em; }
+  button, .btn, select, input[type=text] { font:inherit; font-size:15px; border:0; border-radius:12px; padding:11px 14px; color:var(--fg); background:#2a3156; min-height:44px; }
+  button, .btn { cursor:pointer; }
+  button:hover, .btn:hover { background:#353d6b; }
+  button.primary { background:var(--acc); color:#fff; font-weight:600; }
+  button.pink { background:var(--acc2); color:#fff; font-weight:600; }
+  button[aria-pressed="true"] { outline:2px solid var(--acc2); background:#33407a; }
+  button.node { flex:1 1 calc(50% - 8px); text-align:left; }
+  select { width:100%; }
+  #toggleUi { min-height:32px; padding:4px 10px; font-size:13px; }
+  #status { font-size:14px; line-height:1.4; margin-top:6px; min-height:20px; }
+  #status.err { color:#ff9a9a; }
+  .hint { font-size:12.5px; color:var(--muted); line-height:1.45; }
+  kbd { background:#2a3156; border-radius:4px; padding:0 4px; font-size:12px; }
+  #drop { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(107,140,255,.25); border:4px dashed var(--acc); font-size:26px; font-weight:600; z-index:80; pointer-events:none; }
+  body.dragging #drop { display:flex; }
+  /* Infopunten */
+  .pin { width:34px; height:34px; border-radius:50%; background:var(--acc); color:#fff; font:700 18px/34px Georgia,serif; text-align:center; box-shadow:0 0 0 4px rgba(255,255,255,.55), 0 4px 12px rgba(0,0,0,.5); cursor:pointer; }
+  .pin.mine { background:var(--acc2); font:700 16px/34px system-ui,sans-serif; }
+  body.placing .psv-canvas-container, body.placing .psv-container { cursor:crosshair !important; }
+  /* Dialoog voor eigen infopunt */
+  #dlg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:90; background:rgba(0,0,0,.35); }
+  #dlg.open { display:flex; }
+  #dlg form { background:#151a33; border-radius:16px; padding:16px; width:min(360px, calc(100vw - 24px)); box-shadow:0 10px 40px rgba(0,0,0,.6); }
+  #dlg input { width:100%; margin:8px 0 12px; }
+  /* Rokid SBS-modus */
+  body.sbs #ui { display:none; }
+  body.sbs .psv-navbar, body.sbs .psv-markers, body.sbs .psv-virtual-tour-arrows, body.sbs .psv-tooltip, body.sbs .psv-panel, body.sbs .psv-notification { display:none !important; }
+  #sbsHint { position:absolute; inset:0; display:none; pointer-events:none; z-index:200; }
+  body.sbs #sbsHint { display:flex; }
+  #sbsHint > div { flex:1; display:flex; align-items:flex-end; justify-content:center; padding-bottom:6vh; }
+  #sbsHint span { display:inline-block; background:rgba(0,0,0,.65); color:#fff; padding:10px 16px; border-radius:12px; font-size:18px; text-align:center; max-width:90%; transition:opacity .8s; }
+  body.sbs.half #sbsHint span { transform:scaleX(.5); max-width:180%; }
+  #sbsHint.fade span { opacity:0; }
+  .psv-panel-content h3 { margin-top:0; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+    "@photo-sphere-viewer/core": "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5.15.1/index.module.js",
+    "@photo-sphere-viewer/markers-plugin": "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/markers-plugin@5.15.1/index.module.js",
+    "@photo-sphere-viewer/virtual-tour-plugin": "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/virtual-tour-plugin@5.15.1/index.module.js",
+    "@photo-sphere-viewer/gyroscope-plugin": "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/gyroscope-plugin@5.15.1/index.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="viewer"></div>
+<div id="drop">Laat los om je 360°-foto te openen</div>
+<div id="sbsHint"><div><span>Houd de helderheidsknop op je Rokid-bril ±2 s ingedrukt voor 3D<br><small>Esc of tik om te stoppen · <kbd>N</kbd> volgende foto</small></span></div><div><span>Houd de helderheidsknop op je Rokid-bril ±2 s ingedrukt voor 3D<br><small>Esc of tik om te stoppen · <kbd>N</kbd> volgende foto</small></span></div></div>
+
+<div id="dlg"><form id="dlgForm">
+  <b>Nieuw infopunt</b>
+  <input id="dlgText" type="text" maxlength="140" placeholder="Bijvoorbeeld: hier staat de laser" autocomplete="off">
+  <div class="row" style="margin:0;justify-content:flex-end">
+    <button type="button" id="dlgCancel">Annuleren</button>
+    <button type="submit" class="primary">Opslaan</button>
+  </div>
+</form></div>
+
+<div id="ui">
+  <h1><span>360°-foto's <small>Photo Sphere Viewer · demo 08</small></span><button id="toggleUi" title="Paneel in-/uitklappen">–</button></h1>
+  <div class="body">
+    <div id="status">Bezig met opstarten…</div>
+
+    <div class="lbl">Rondleiding (klik ook op de pijlen in de foto)</div>
+    <div class="row" id="nodes"></div>
+
+    <div class="lbl">Je eigen 360°-foto</div>
+    <div class="row">
+      <label class="btn" for="file" style="flex:1;text-align:center">📂 Foto kiezen</label>
+      <input id="file" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+    </div>
+    <div class="hint">Of sleep een <b>360°-foto</b> (JPG, verhouding 2:1, "equirectangular") op deze pagina. De foto blijft op je eigen apparaat; er wordt niets geüpload.</div>
+
+    <div class="lbl">Infopunten</div>
+    <div class="row">
+      <button id="addPin" aria-pressed="false" style="flex:1">➕ Infopunt plaatsen</button>
+      <button id="clearPins" title="Wis je eigen infopunten op deze foto">🗑 Mijn punten wissen</button>
+    </div>
+    <div class="hint">Klik op <b>Infopunt plaatsen</b> en daarna op een plek in de foto. Je punten worden in deze browser bewaard. Klik op een punt om de tekst te lezen.</div>
+
+    <div class="lbl">Rondkijken</div>
+    <div class="row">
+      <button id="gyro" aria-pressed="false">📱 Bewegingssensor</button>
+      <button id="autorot" aria-pressed="false">⟳ Auto-draaien</button>
+      <button id="fs">⛶ Volledig scherm</button>
+    </div>
+    <div class="hint">Slepen = rondkijken · scrollen/knijpen = zoomen. Met <b>Bewegingssensor</b> kijk je rond door je telefoon te bewegen (op een iPhone vraagt Safari eerst om toestemming).</div>
+
+    <div class="lbl">Rokid AR-bril</div>
+    <div class="row">
+      <button id="sbsBtn" class="pink" style="flex:1">🕶 Rokid 3D (SBS)</button>
+      <select id="sbsMode" style="flex:1;width:auto">
+        <option value="auto">Automatisch</option>
+        <option value="half">Half-SBS (1920 breed)</option>
+        <option value="full">Full-SBS (3840 breed)</option>
+      </select>
+    </div>
+    <div class="hint">Klik op <b>Rokid 3D</b>: het beeld wordt schermvullend twee keer naast elkaar getekend, één per oog. Houd daarna de helderheidsknop op het rechterpootje van je bril ±2 s ingedrukt om de 3D-stand aan te zetten. Een 360°-foto is plat, dus je ziet geen extra diepte, maar wel een groot, rustig beeld per oog. Stoppen: <kbd>Esc</kbd> of één keer tikken. <kbd>N</kbd>/<kbd>P</kbd> = volgende/vorige foto.</div>
+  </div>
+</div>
+
+<script type="module">
+import { Viewer, events, utils } from "@photo-sphere-viewer/core";
+import { MarkersPlugin } from "@photo-sphere-viewer/markers-plugin";
+import { VirtualTourPlugin } from "@photo-sphere-viewer/virtual-tour-plugin";
+import { GyroscopePlugin } from "@photo-sphere-viewer/gyroscope-plugin";
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status");
+function setStatus(msg, isErr = false) { statusEl.textContent = msg; statusEl.classList.toggle("err", isErr); }
+window.__demo = { errors: [], nodeChanges: 0 };
+addEventListener("error", (e) => window.__demo.errors.push(String(e.message || e)));
+
+// yaw/pitch uit een plek in de foto (fractie van breedte/hoogte)
+const at = (fx, fy) => ({ yaw: (fx - 0.5) * 2 * Math.PI, pitch: (0.5 - fy) * Math.PI });
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const info = (id, pos, title, text) => ({
+  id, position: pos, html: '<div class="pin">i</div>', anchor: "center center", size: { width: 34, height: 34 },
+  tooltip: { content: `<b>${title}</b><br>${text}`, position: "top center" },
+  content: `<h3>${title}</h3><p>${text}</p>`,
+});
+
+// Voorbeeldfoto's: Poly Haven (CC0), verkleind naar 4096×2048
+const BASE_NODES = [
+  { id: "werkplaats", name: "🪚 Werkplaats", panorama: "werkplaats.jpg", caption: "Timmerwerkplaats · Greg Zaal, Poly Haven (CC0)",
+    links: [ { nodeId: "werkbank", position: { yaw: 0, pitch: 0 } }, { nodeId: "berlijn", position: { yaw: Math.PI, pitch: 0 } } ],
+    markers: [ info("i-hout", at(0.9, 0.46), "Houtvoorraad", "Planken en balken, netjes op maat in de stellingen."),
+               info("i-bank", at(0.32, 0.55), "Groene werkbank", "Een stevige bank om op te zagen en te schuren.") ] },
+  { id: "werkbank", name: "🔨 Werkbank", panorama: "werkbank.jpg", caption: "Timmerwerkplaats, achterste ruimte · Greg Zaal, Poly Haven (CC0)",
+    links: [ { nodeId: "werkplaats", position: { yaw: Math.PI, pitch: 0 } }, { nodeId: "atelier", position: { yaw: -Math.PI / 2, pitch: 0 } } ],
+    markers: [ info("i-ronde", at(0.51, 0.7), "Grote ronde werkbank", "Hier wordt aan meerdere klussen tegelijk gewerkt."),
+               info("i-lamp", at(0.5, 0.2), "Lichtbak", "Veel licht van boven: handig voor precisiewerk.") ] },
+  { id: "atelier", name: "🎨 Atelier", panorama: "atelier.jpg", caption: "Kunstenaarsatelier · Oliksiy Yakovlyev, Poly Haven (CC0)",
+    links: [ { nodeId: "werkbank", position: { yaw: 2.6, pitch: 0 } }, { nodeId: "berlijn", position: { yaw: 0.5, pitch: 0 } } ],
+    markers: [ info("i-ramen", at(0.58, 0.44), "Ramen", "Daglicht van opzij: ideaal om te schilderen."),
+               info("i-doeken", at(0.1, 0.5), "Schilderijen", "Een hele wand vol eigen werk.") ] },
+  { id: "berlijn", name: "🏛 Berlijn (buiten)", panorama: "berlijn.jpg", caption: "Rotes Rathaus, Berlijn · Alexander Scholten, Poly Haven (CC0)",
+    links: [ { nodeId: "werkplaats", position: { yaw: -1.5, pitch: 0 } }, { nodeId: "atelier", position: { yaw: -2.6, pitch: 0 } } ],
+    markers: [ info("i-rathaus", at(0.78, 0.39), "Rotes Rathaus", "Het rode stadhuis van Berlijn."),
+               info("i-toren", at(0.48, 0.3), "Fernsehturm", "De tv-toren op de Alexanderplatz, 368 meter hoog.") ] },
+];
+let nodes = BASE_NODES.map((n) => ({ ...n, thumbnail: undefined }));
+let ownUrl = null;
+
+const viewer = new Viewer({
+  container: $("viewer"),
+  loadingTxt: "Laden…",
+  defaultZoomLvl: 30,
+  touchmoveTwoFingers: false,
+  mousewheelCtrlKey: false,
+  navbar: ["zoom", "move", "caption", "fullscreen"],
+  lang: { zoom: "Zoom", zoomOut: "Uitzoomen", zoomIn: "Inzoomen", moveUp: "Omhoog", moveDown: "Omlaag", moveLeft: "Links", moveRight: "Rechts",
+          fullscreen: "Volledig scherm", menu: "Menu", close: "Sluiten", twoFingers: "Gebruik twee vingers om te bewegen",
+          ctrlZoom: "Gebruik Ctrl + scrollen om te zoomen", loadError: "De foto kon niet worden geladen", gyroscope: "Bewegingssensor" },
+  plugins: [
+    MarkersPlugin,
+    GyroscopePlugin.withConfig({ touchmove: true }),
+    VirtualTourPlugin.withConfig({
+      positionMode: "manual",
+      renderMode: "3d",
+      nodes,
+      startNodeId: "werkplaats",
+      preload: true,
+      transitionOptions: { showLoader: true, speed: "20rpm", effect: "fade", rotation: true },
+      getLinkTooltip: (content, link) => "Naar: " + (nodes.find((n) => n.id === link.nodeId)?.name || link.nodeId),
+    }),
+  ],
+});
+const markers = viewer.getPlugin(MarkersPlugin);
+const tour = viewer.getPlugin(VirtualTourPlugin);
+const gyro = viewer.getPlugin(GyroscopePlugin);
+window.__demo.viewer = viewer;
+
+// ---------- Rondleiding-knoppen ----------
+function nodeButtons() {
+  const wrap = $("nodes"); wrap.innerHTML = "";
+  for (const n of nodes) {
+    const b = document.createElement("button");
+    b.className = "node"; b.textContent = n.name; b.dataset.id = n.id; b.setAttribute("aria-pressed", "false");
+    b.onclick = () => goTo(n.id);
+    wrap.appendChild(b);
+  }
+}
+function markNode(id) { for (const b of document.querySelectorAll("button.node")) b.setAttribute("aria-pressed", String(b.dataset.id === id)); }
+function goTo(id) { setStatus("Foto wordt geladen…"); return tour.setCurrentNode(id); }
+function step(d) {
+  const cur = tour.getCurrentNode()?.id, i = nodes.findIndex((n) => n.id === cur);
+  goTo(nodes[(i + d + nodes.length) % nodes.length].id);
+}
+nodeButtons();
+
+// ---------- Eigen infopunten (localStorage) ----------
+const LS_KEY = "td08-infopunten";
+const loadPins = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } };
+const savePins = (all) => { try { localStorage.setItem(LS_KEY, JSON.stringify(all)); } catch {} };
+const pinKey = (node) => node.pinKey || node.id;
+function myMarker(p) {
+  return { id: p.id, position: { yaw: p.yaw, pitch: p.pitch }, html: '<div class="pin mine">★</div>', anchor: "center center", size: { width: 34, height: 34 },
+    tooltip: { content: esc(p.text), position: "top center" },
+    content: `<h3>Mijn infopunt</h3><p>${esc(p.text)}</p><p><button onclick="window.__td08remove('${p.id}')" style="font:inherit;padding:8px 12px;border-radius:10px;border:0;cursor:pointer">🗑 Dit punt verwijderen</button></p>`,
+    data: { mine: true } };
+}
+function showMyPins(node) {
+  const list = loadPins()[pinKey(node)] || [];
+  for (const p of list) { try { markers.addMarker(myMarker(p), false); } catch {} }
+  markers.renderMarkers?.();
+  window.__demo.myPins = list.length;
+}
+window.__td08remove = (id) => {
+  const node = tour.getCurrentNode(); const all = loadPins(); const k = pinKey(node);
+  all[k] = (all[k] || []).filter((p) => p.id !== id); savePins(all);
+  try { markers.removeMarker(id); } catch {}
+  viewer.panel.hide();
+  window.__demo.myPins = all[k].length;
+  setStatus("Infopunt verwijderd.");
+};
+let placing = false, pending = null;
+function setPlacing(on) { placing = on; $("addPin").setAttribute("aria-pressed", String(on)); document.body.classList.toggle("placing", on);
+  if (on) setStatus("Klik nu op een plek in de foto voor je infopunt."); }
+$("addPin").onclick = () => setPlacing(!placing);
+viewer.addEventListener("click", ({ data }) => {
+  if (sbs.on) return;
+  if (!placing || data.rightclick || data.marker) return;
+  pending = { yaw: data.yaw, pitch: data.pitch };
+  setPlacing(false);
+  $("dlgText").value = ""; $("dlg").classList.add("open"); setTimeout(() => $("dlgText").focus(), 30);
+});
+$("dlgCancel").onclick = () => { $("dlg").classList.remove("open"); pending = null; setStatus("Geen infopunt geplaatst."); };
+$("dlgForm").onsubmit = (e) => {
+  e.preventDefault();
+  const text = $("dlgText").value.trim();
+  $("dlg").classList.remove("open");
+  if (!pending || !text) { pending = null; setStatus("Geen tekst ingevuld, dus geen infopunt geplaatst."); return; }
+  const node = tour.getCurrentNode(); const all = loadPins(); const k = pinKey(node);
+  const p = { id: "mijn-" + Date.now().toString(36), yaw: pending.yaw, pitch: pending.pitch, text };
+  (all[k] = all[k] || []).push(p); savePins(all);
+  markers.addMarker(myMarker(p));
+  pending = null;
+  window.__demo.myPins = all[k].length;
+  setStatus(`Infopunt "${text}" geplaatst en bewaard.`);
+};
+$("clearPins").onclick = () => {
+  const node = tour.getCurrentNode(); if (!node) return;
+  const all = loadPins(); const list = all[pinKey(node)] || [];
+  for (const p of list) { try { markers.removeMarker(p.id, false); } catch {} }
+  markers.renderMarkers?.();
+  delete all[pinKey(node)]; savePins(all); window.__demo.myPins = 0;
+  setStatus(list.length ? `${list.length} eigen infopunt(en) gewist op deze foto.` : "Je had hier nog geen eigen infopunten.");
+};
+
+tour.addEventListener("node-changed", ({ node }) => {
+  markNode(node.id);
+  showMyPins(node);
+  window.__demo.node = node.id; window.__demo.nodeChanges++;
+  const name = nodes.find((n) => n.id === node.id)?.name || node.id;
+  setStatus(node.id === "eigen" ? `Klaar: je eigen foto (${node.fileName}). Sleep om rond te kijken.`
+    : `Klaar: ${name.replace(/^\S+\s/, "")}. Sleep om rond te kijken, klik op een pijl voor de volgende plek.`);
+});
+viewer.addEventListener("panorama-error", () => setStatus("De foto kon niet worden geladen. Controleer je internetverbinding of kies een andere foto.", true));
+
+// ---------- Eigen 360°-foto ----------
+async function loadFile(file) {
+  if (!file) return;
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) {
+    setStatus(`"${file.name}" is geen foto. Kies een JPG (of PNG/WebP) van je 360°-camera.`, true); return;
+  }
+  setStatus(`${file.name} wordt geopend…`);
+  const url = URL.createObjectURL(file);
+  let w = 0, h = 0;
+  try { const bmp = await createImageBitmap(file); w = bmp.width; h = bmp.height; bmp.close?.(); }
+  catch { URL.revokeObjectURL(url); setStatus("Kon deze foto niet lezen. Is het een gewone JPG?", true); return; }
+  const ratio = w / h;
+  const warn = Math.abs(ratio - 2) > 0.05 ? ` Let op: deze foto is ${w}×${h} (geen 2:1), dus waarschijnlijk geen volledige 360°-foto; hij kan vervormd lijken.` : "";
+  if (ownUrl) URL.revokeObjectURL(ownUrl);
+  ownUrl = url;
+  const own = { id: "eigen", name: "📷 Eigen foto", panorama: url, caption: esc(file.name), fileName: file.name,
+    pinKey: "eigen:" + file.name + ":" + file.size, markers: [],
+    links: [ { nodeId: "werkplaats", position: { yaw: Math.PI, pitch: 0 } } ] };
+  nodes = [...BASE_NODES.map((n) => n.id === "werkplaats"
+    ? { ...n, links: [...n.links, { nodeId: "eigen", position: { yaw: -Math.PI / 2, pitch: 0 } }] } : { ...n }), own];
+  nodeButtons();
+  await tour.setNodes(nodes, "eigen");
+  window.__demo.own = { w, h };
+  if (warn) setTimeout(() => setStatus(statusEl.textContent + warn, true), 50);
+}
+window.__demo.loadFile = loadFile;
+$("file").onchange = (e) => { loadFile(e.target.files[0]); e.target.value = ""; };
+let dragDepth = 0;
+addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove("dragging"); });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging"); loadFile(e.dataTransfer?.files?.[0]); });
+
+// ---------- Rondkijken ----------
+$("gyro").onclick = async () => {
+  if (gyro.isEnabled()) { gyro.stop(); return; }
+  try {
+    // iPhone/iPad: toestemming moet direct vanuit de klik gevraagd worden
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== "granted") { setStatus("Geen toestemming voor de bewegingssensor. Sta 'Beweging en oriëntatie' toe in Safari en probeer opnieuw.", true); return; }
+    }
+    const ok = await gyro.isSupported();
+    if (!ok) { setStatus("Dit apparaat heeft geen bewegingssensor (of de browser geeft hem niet door). Probeer het op je telefoon.", true); return; }
+    await gyro.start();
+  } catch (e) { setStatus("De bewegingssensor kon niet starten: " + (e?.message || e), true); }
+};
+gyro.addEventListener("gyroscope-updated", ({ gyroscopeEnabled }) => {
+  $("gyro").setAttribute("aria-pressed", String(gyroscopeEnabled));
+  if (gyroscopeEnabled) setStatus("Bewegingssensor aan: beweeg je telefoon om rond te kijken.");
+});
+let autoRot = false;
+$("autorot").onclick = () => { autoRot = !autoRot; $("autorot").setAttribute("aria-pressed", String(autoRot)); };
+viewer.addEventListener("before-render", ({ elapsed }) => {
+  if (!autoRot || sbs.on || viewer.state.loadingPromise) return;
+  const p = viewer.getPosition();
+  viewer.rotate({ yaw: p.yaw + 0.00012 * (elapsed || 16), pitch: p.pitch });
+});
+$("fs").onclick = () => viewer.enterFullscreen();
+$("toggleUi").onclick = () => { const c = $("ui").classList.toggle("collapsed"); $("toggleUi").textContent = c ? "+" : "–"; };
+
+// ---------- Rokid 3D (side-by-side) ----------
+// Eén camera, twee keer getekend. Half-SBS: elk oog krijgt het hele beeld, horizontaal samengeperst (de bril rekt het weer uit).
+// Full-SBS: elk oog krijgt een eigen, onvervormde helft.
+const sbs = { on: false, full: false };
+function decideFull() {
+  const m = $("sbsMode").value;
+  if (m === "full") return true;
+  if (m === "half") return false;
+  const w = innerWidth * (devicePixelRatio || 1), h = innerHeight * (devicePixelRatio || 1);
+  return w >= 3840 && w / h >= 3;
+}
+function sbsRendererFactory(r) {
+  return {
+    render(scene, camera) {
+      const w = r.domElement.width, h = r.domElement.height, half = Math.floor(w / 2);
+      const pr = r.getPixelRatio();
+      const keep = camera.aspect;
+      camera.aspect = sbs.full ? half / h : w / h;
+      camera.updateProjectionMatrix();
+      r.setScissorTest(true);
+      for (const x of [0, half]) {
+        r.setViewport(x / pr, 0, half / pr, h / pr);
+        r.setScissor(x / pr, 0, half / pr, h / pr);
+        r.render(scene, camera);
+      }
+      r.setScissorTest(false);
+      r.setViewport(0, 0, w / pr, h / pr);
+      camera.aspect = keep;
+      camera.updateProjectionMatrix();
+    },
+  };
+}
+const hintEl = $("sbsHint");
+viewer.container.appendChild(hintEl); // zodat de hint ook in volledig scherm zichtbaar is
+let hintTimer;
+function enterSbs() {
+  if (sbs.on) return;
+  sbs.on = true;
+  setPlacing(false);
+  viewer.panel.hide(); viewer.hideError?.();
+  sbs.full = decideFull();
+  document.body.classList.add("sbs");
+  document.body.classList.toggle("half", !sbs.full);
+  viewer.renderer.setCustomRenderer(sbsRendererFactory);
+  try { viewer.enterFullscreen(); } catch {}
+  viewer.needsUpdate();
+  hintEl.classList.remove("fade");
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => hintEl.classList.add("fade"), 6000);
+  window.__demo.sbs = true;
+}
+function exitSbs() {
+  if (!sbs.on) return;
+  sbs.on = false;
+  document.body.classList.remove("sbs", "half");
+  viewer.renderer.setCustomRenderer(null);
+  if (viewer.isFullscreenEnabled()) viewer.exitFullscreen();
+  viewer.needsUpdate();
+  window.__demo.sbs = false;
+}
+window.__demo.enterSbs = enterSbs; window.__demo.exitSbs = exitSbs;
+$("sbsBtn").onclick = enterSbs;
+viewer.addEventListener("fullscreen", ({ fullscreenEnabled }) => { if (!fullscreenEnabled && sbs.on) exitSbs(); });
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.key === "Escape" && sbs.on) exitSbs();
+  if (sbs.on && (e.key === "n" || e.key === "N" || e.key === "PageDown")) step(1);
+  if (sbs.on && (e.key === "p" || e.key === "P" || e.key === "PageUp")) step(-1);
+});
+// Tik (zonder slepen) = stoppen
+let down = null;
+viewer.container.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; }, true);
+viewer.container.addEventListener("pointerup", (e) => {
+  if (!sbs.on || !down) return;
+  const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t;
+  if (moved < 8 && dt < 300) exitSbs();
+  down = null;
+}, true);
+</script>
+</body>
+</html>
