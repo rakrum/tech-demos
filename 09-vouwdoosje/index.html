@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Vouwdoosje-maker voor de xTool C1 (Maker.js) · Tech demo 09</title>
+<style>
+  :root { --bg:#f5f6fb; --card:#fff; --fg:#1d2333; --muted:#5d6584; --acc:#4f6bff; --warn:#b45309; --err:#b91c1c; --ok:#15803d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:16px 20px 4px; }
+  header h1 { margin:0; font-size:22px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:14px; }
+  main { display:grid; grid-template-columns:minmax(300px,380px) 1fr; gap:16px; padding:12px 20px 24px; align-items:start; }
+  @media (max-width:860px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border-radius:14px; padding:14px 16px; box-shadow:0 2px 10px rgba(20,30,80,.07); }
+  .lbl { font-size:12px; color:var(--muted); margin:12px 0 4px; text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+  label.f { display:flex; flex-direction:column; font-size:13px; gap:3px; }
+  input[type=number], input[type=text], select { font:inherit; font-size:15px; padding:8px 10px; border:1px solid #cfd4e6; border-radius:10px; background:#fff; width:100%; min-height:40px; }
+  label.c { display:flex; gap:8px; align-items:center; font-size:14px; margin:6px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  button { font:inherit; font-size:15px; border:0; border-radius:10px; padding:10px 14px; background:#e6e9f7; color:var(--fg); cursor:pointer; min-height:42px; }
+  button.primary { background:var(--acc); color:#fff; font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  #preview { width:100%; min-height:320px; background:#fbfbfe; border:1px solid #e3e6f2; border-radius:12px; display:flex; align-items:center; justify-content:center; padding:8px; }
+  #preview svg { width:100%; height:auto; max-height:70vh; }
+  #info { font-size:14px; line-height:1.5; margin-top:10px; }
+  .msg { padding:8px 10px; border-radius:10px; margin-top:8px; font-size:14px; line-height:1.4; }
+  .msg.ok { background:#e8f7ee; color:var(--ok); }
+  .msg.warn { background:#fff4e5; color:var(--warn); }
+  .msg.err { background:#fdecec; color:var(--err); }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:13px; color:var(--muted); margin-top:8px; }
+  .legend span::before { content:""; display:inline-block; width:22px; height:0; border-top:3px solid currentColor; vertical-align:middle; margin-right:6px; }
+  .l-cut { color:#ff0000; } .l-score { color:#0000ff; } .l-pen { color:#000; } .l-mat { color:#9aa3c7; }
+  .l-score.dash::before { border-top-style:dashed; } .l-mat::before { border-top-style:dotted !important; }
+  .hint { font-size:12.5px; color:var(--muted); line-height:1.45; margin:4px 0 0; }
+  ol { padding-left:20px; margin:6px 0; } li { margin:4px 0; font-size:14px; line-height:1.45; }
+  .only-tray, .only-tuck { }
+  body.tray .only-tuck, body:not(.tray) .only-tray { display:none; }
+  footer { padding:0 20px 24px; font-size:12.5px; color:var(--muted); }
+  a { color:var(--acc); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/bezier-js@2.6.1/bezier.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/makerjs@0.19.2/dist/browser.maker.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>📦 Vouwdoosje-maker voor de xTool C1</h1>
+  <p>Vul de maten in, kies een model en download een SVG of DXF op ware grootte: rood = snijden, blauw = rillen (vouwlijn). Gemaakt met <a href="https://maker.js.org/" target="_blank" rel="noopener">Maker.js</a>.</p>
+</header>
+<main>
+  <section class="card" id="form">
+    <div class="lbl">Model</div>
+    <select id="style">
+      <option value="tuck-rev">Doosje met insteekkleppen (klassiek, kleppen tegenover elkaar)</option>
+      <option value="tuck-straight">Doosje met insteekkleppen (beide kleppen aan de achterkant)</option>
+      <option value="tray">Bakje met los deksel</option>
+    </select>
+
+    <div class="lbl">Binnenmaat (mm)</div>
+    <div class="grid3">
+      <label class="f">Lengte<input id="L" type="number" min="15" max="400" step="1" value="70"></label>
+      <label class="f">Breedte<input id="W" type="number" min="15" max="400" step="1" value="45"></label>
+      <label class="f">Hoogte<input id="H" type="number" min="10" max="400" step="1" value="90"></label>
+    </div>
+    <p class="hint">Lengte = voorkant, breedte = zijkant (diepte), hoogte = van bodem tot deksel.</p>
+
+    <div class="lbl">Karton</div>
+    <div class="grid2">
+      <label class="f">Dikte (mm)<input id="t" type="number" min="0.1" max="1.5" step="0.05" value="0.4"></label>
+      <label class="f only-tuck">Lijmrand (mm)<input id="g" type="number" min="5" max="30" step="1" value="12"></label>
+      <label class="f only-tray">Lijmlipjes (mm)<input id="gt" type="number" min="5" max="30" step="1" value="12"></label>
+    </div>
+    <p class="hint">Per paneel komt er één keer de dikte bij als vouwtoeslag, zodat de binnenmaat klopt. 250 g karton is ongeveer 0,3–0,4 mm.</p>
+
+    <div class="only-tray">
+      <div class="grid2">
+        <label class="f">Dekselhoogte (mm)<input id="Hl" type="number" min="8" max="200" step="1" value="25"></label>
+        <label class="f">Speling deksel (mm)<input id="clr" type="number" min="0" max="5" step="0.1" value="1"></label>
+      </div>
+      <p class="hint">Het deksel wordt automatisch iets groter dan het bakje (2× de dikte + de speling).</p>
+    </div>
+
+    <div class="lbl">Naam op de voorkant (optioneel)</div>
+    <input id="name" type="text" maxlength="24" placeholder="Bijvoorbeeld: Noa" autocomplete="off">
+    <select id="nameMode" style="margin-top:8px">
+      <option value="pen">Naam tekenen met een pen (zwarte laag)</option>
+      <option value="cut">Naam uitsnijden (rood, snijlaag)</option>
+    </select>
+    <p class="hint">De letters worden omgezet naar lijnen (contouren), want xTool Studio slaat gewone SVG-tekst over. Bij het bakje komt de naam op het deksel.</p>
+
+    <div class="lbl">Vouwlijnen</div>
+    <select id="foldMode">
+      <option value="score">Doorgetrokken lijn (rillen met de rilpunt of pen)</option>
+      <option value="dash">Stippellijn (perforatie met het mesje)</option>
+    </select>
+
+    <div class="lbl">Snijmat</div>
+    <select id="mat">
+      <option value="12x12">Standaard mat 12×12 inch (304,8 × 304,8 mm)</option>
+      <option value="12x24">Lange mat 12×24 inch (304,8 × 609,6 mm)</option>
+    </select>
+    <label class="c"><input id="ruler" type="checkbox" checked> Meetvierkant 20 × 20 mm toevoegen (om de schaal te controleren)</label>
+
+    <div class="row">
+      <button class="primary" id="dlSvg" disabled>⬇ SVG downloaden</button>
+      <button id="dlDxf" disabled>⬇ DXF downloaden</button>
+    </div>
+    <div id="status" class="msg" style="display:none"></div>
+  </section>
+
+  <section>
+    <div class="card">
+      <div id="preview">Bezig met laden…</div>
+      <div class="legend"><span class="l-cut">snijden</span><span class="l-score" id="lgScore">rillen</span><span class="l-pen">pen (naam)</span><span class="l-mat">snijmat (alleen voorbeeld)</span></div>
+      <div id="info"></div>
+      <div id="checks"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <b>Zo snijd je hem op de xTool C1</b>
+      <ol>
+        <li>Download de <b>SVG</b> en open hem in <b>xTool Studio</b> (Importeren). Het bestand is al op ware grootte in millimeters.</li>
+        <li>Zet de <b>rode</b> lijnen op <b>Snijden</b> met het fijne mesje (fine-point blade).</li>
+        <li>Zet de <b>blauwe</b> lijnen op <b>Rillen</b> met de rilpunt (scoring tip). Zie je geen rilfunctie, kies dan <b>Pen</b>: dan teken je de vouwlijnen en vouw je ze zelf met een liniaal. Of kies hierboven <i>Stippellijn</i> en zet blauw ook op Snijden.</li>
+        <li>De <b>zwarte</b> naam zet je op <b>Pen</b> (tekenen).</li>
+        <li>Gebruik karton van ongeveer <b>250 g</b> (onder 1 mm) op de <b>LightGrip</b>-mat. Dik karton heeft soms twee snijgangen nodig.</li>
+        <li><b>Eerst een proefsnede:</b> snijd alleen het meetvierkant en meet het na met een liniaal. Is het precies 20 × 20 mm, dan klopt de schaal. Zo niet, controleer bij het importeren de DPI-instelling (96 of 72) of zet de grootte handmatig goed.</li>
+        <li>Vouw langs de blauwe lijnen <b>van je af</b> (de bovenkant op de mat wordt de buitenkant), en lijm de lijmrand aan de binnenkant van de voorkant.</li>
+      </ol>
+      <p class="hint">Of xTool Studio voor de C1 een aparte optie "Rillen" toont, kon ik nog niet bevestigen; de C1 komt officieel uit op 11 november 2026. Een kleur koppelt Studio niet automatisch aan een bewerking: je kiest per lijn zelf Snijden, Rillen of Pen.</p>
+    </div>
+  </section>
+</main>
+<footer>
+  Gemaakt met <a href="https://github.com/microsoft/maker.js" target="_blank" rel="noopener">Maker.js</a> (Apache-2.0, Microsoft), <a href="https://opentype.js.org/" target="_blank" rel="noopener">opentype.js</a> (MIT) en <a href="https://github.com/Pomax/bezierjs" target="_blank" rel="noopener">bezier-js</a> (MIT). Lettertype: <a href="https://fonts.google.com/specimen/Fredoka" target="_blank" rel="noopener">Fredoka</a> (SIL Open Font License 1.1) via Fontsource. Alles draait in je browser; er wordt niets geüpload.
+</footer>
+
+<script>
+(() => {
+const makerjs = require('makerjs');
+const $ = (id) => document.getElementById(id);
+const MATS = { '12x12': [304.8, 304.8], '12x24': [304.8, 609.6] };
+const MARGIN = 1;          // mm wit rondom in de SVG
+const RULER = 20;          // mm meetvierkant
+const FONT_URL = 'https://cdn.jsdelivr.net/npm/@fontsource/fredoka@5.2.8/files/fredoka-latin-600-normal.woff';
+let font = null, current = null;
+const r4 = (v) => Math.round(v * 1e4) / 1e4;
+const fmt = (v) => (Math.round(v * 10) / 10).toLocaleString('nl-NL');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rect = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+
+// ---------- Geometrie ----------
+// Elk onderdeel is een veelhoek. Een rand die in twee onderdelen voorkomt is een vouwlijn (rillen),
+// een rand die maar in één onderdeel zit is een snijlijn. De snijranden worden aan elkaar geregen tot één omtrek.
+function tuckBox(p) {
+  const t = p.t, Lp = p.L + t, Wp = p.W + t, Hp = p.H + t;
+  const g = clamp(p.g, 5, Math.min(30, Lp * 0.5));
+  const tH = clamp(Math.round(Wp * 0.6), 8, 20);          // insteektong
+  const tongue = Math.min(tH, Hp * 0.4);
+  const dh = Math.min(Lp * 0.45, Wp);                     // stofklep
+  const x = [0, Lp, Lp + Wp, 2 * Lp + Wp, 2 * Lp + 2 * Wp]; // voor, zij, achter, zij, lijmrand
+  const pieces = [];
+  pieces.push({ n: 'voorkant', pts: rect(x[0], 0, Lp, Hp) });
+  pieces.push({ n: 'zijkant 1', pts: rect(x[1], 0, Wp, Hp) });
+  pieces.push({ n: 'achterkant', pts: rect(x[2], 0, Lp, Hp) });
+  pieces.push({ n: 'zijkant 2', pts: rect(x[3], 0, Wp, Hp) });
+  const c = Math.min(g * 0.6, Hp * 0.25);
+  pieces.push({ n: 'lijmrand', pts: [[x[4], 0], [x[4] + g, c], [x[4] + g, Hp - c], [x[4], Hp]] });
+  const lid = (x0, up) => {           // klep + tong, up=true boven, anders onder
+    const s = up ? 1 : -1, y0 = up ? Hp : 0;
+    const y1 = y0 + s * Wp, y2 = y1 + s * tongue, ch = Math.min(tongue * 0.6, Lp * 0.2), inset = Math.min(1, Lp * 0.02);
+    pieces.push({ n: 'klep', pts: [[x0, y0], [x0 + Lp, y0], [x0 + Lp, y1], [x0, y1]] });
+    pieces.push({ n: 'tong', pts: [[x0, y1], [x0 + Lp, y1], [x0 + Lp - inset, y2 - s * ch], [x0 + Lp - inset - ch, y2], [x0 + inset + ch, y2], [x0 + inset, y2 - s * ch]] });
+  };
+  const dust = (x0, up) => {
+    const s = up ? 1 : -1, y0 = up ? Hp : 0, y1 = y0 + s * dh, i = Math.min(dh * 0.35, Wp * 0.25);
+    pieces.push({ n: 'stofklep', pts: [[x0, y0], [x0 + Wp, y0], [x0 + Wp - i, y1], [x0 + i, y1]] });
+  };
+  lid(x[2], true);                                   // bovenklep aan de achterkant
+  lid(p.style === 'tuck-straight' ? x[2] : x[0], false); // onderklep
+  dust(x[1], true); dust(x[3], true); dust(x[1], false); dust(x[3], false);
+  const expected = { w: 2 * Lp + 2 * Wp + g, h: Hp + 2 * (Wp + tongue) };
+  return { pieces, namePanel: { x: 0, y: 0, w: Lp, h: Hp }, expected, info: { Lp, Wp, Hp, g, tongue, dh },
+           outer: [p.L + 2 * t, p.W + 2 * t, p.H + 2 * t],
+           emptyAboveFront: { x: 0, y: Hp, w: Lp, h: Wp + tongue } };
+}
+function trayPieces(L, W, H, t, g0, ox, oy, tag) {
+  const Lp = L + t, Wp = W + t, Hp = H + t;
+  const gt = clamp(Math.min(g0, Wp / 2 - 1), 3, 30);
+  const c = Math.min(gt * 0.6, Hp * 0.25);
+  const P = (pts) => pts.map(([a, b]) => [a + ox + Math.max(Hp, gt), b + oy + Hp]);
+  const pieces = [
+    { n: tag + ' bodem', pts: P(rect(0, 0, Lp, Wp)) },
+    { n: tag + ' wand voor', pts: P(rect(0, -Hp, Lp, Hp)) },
+    { n: tag + ' wand achter', pts: P(rect(0, Wp, Lp, Hp)) },
+    { n: tag + ' wand links', pts: P(rect(-Hp, 0, Hp, Wp)) },
+    { n: tag + ' wand rechts', pts: P(rect(Lp, 0, Hp, Wp)) },
+    // lijmlipjes aan de lange wanden, die aan de binnenkant van de korte wanden komen
+    { n: tag + ' lipje', pts: P([[0, 0], [0, -Hp], [-gt, -Hp + c], [-gt, -c]]) },
+    { n: tag + ' lipje', pts: P([[Lp, 0], [Lp + gt, -c], [Lp + gt, -Hp + c], [Lp, -Hp]]) },
+    { n: tag + ' lipje', pts: P([[0, Wp], [-gt, Wp + c], [-gt, Wp + Hp - c], [0, Wp + Hp]]) },
+    { n: tag + ' lipje', pts: P([[Lp, Wp], [Lp, Wp + Hp], [Lp + gt, Wp + Hp - c], [Lp + gt, Wp + c]]) },
+  ];
+  const side = Math.max(Hp, gt);
+  return { pieces, w: Lp + 2 * side, h: Wp + 2 * Hp, base: { x: ox + side, y: oy + Hp, w: Lp, h: Wp }, Lp, Wp, Hp, gt };
+}
+function trayBox(p, matW) {
+  const t = p.t;
+  const Hl = clamp(p.Hl, 8, p.H + t);
+  const Ll = p.L + 2 * t + p.clr, Wl = p.W + 2 * t + p.clr;
+  const tray = trayPieces(p.L, p.W, p.H, t, p.gt, 0, 0, 'bakje');
+  const lidProbe = trayPieces(Ll, Wl, Hl, t, p.gt, 0, 0, 'deksel');
+  const gap = 8;
+  const horizontal = tray.w + gap + lidProbe.w <= matW || (tray.h + gap + lidProbe.h > MATS['12x24'][1]);
+  const lid = horizontal ? trayPieces(Ll, Wl, Hl, t, p.gt, tray.w + gap, 0, 'deksel') : trayPieces(Ll, Wl, Hl, t, p.gt, 0, tray.h + gap, 'deksel');
+  const expected = horizontal ? { w: tray.w + gap + lid.w, h: Math.max(tray.h, lid.h) } : { w: Math.max(tray.w, lid.w), h: tray.h + gap + lid.h };
+  return { pieces: tray.pieces.concat(lid.pieces), namePanel: lid.base, expected, horizontal,
+           info: { tray: { Lp: tray.Lp, Wp: tray.Wp, Hp: tray.Hp, gt: tray.gt, w: tray.w, h: tray.h }, lid: { Lp: lid.Lp, Wp: lid.Wp, Hp: lid.Hp, gt: lid.gt, w: lid.w, h: lid.h }, Hl, gap },
+           outer: [p.L + 2 * t, p.W + 2 * t, p.H + t], lidOuter: [Ll + 2 * t, Wl + 2 * t, Hl + t] };
+}
+function classify(pieces) {
+  const edges = new Map();
+  const key = (a, b) => { const ka = r4(a[0]) + ',' + r4(a[1]), kb = r4(b[0]) + ',' + r4(b[1]); return ka < kb ? ka + '|' + kb : kb + '|' + ka; };
+  for (const pc of pieces) {
+    for (let i = 0; i < pc.pts.length; i++) {
+      const a = pc.pts[i], b = pc.pts[(i + 1) % pc.pts.length];
+      if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) continue;
+      const k = key(a, b); const e = edges.get(k) || { a, b, n: 0 }; e.n++; edges.set(k, e);
+    }
+  }
+  const cut = [], score = [], problems = [];
+  for (const e of edges.values()) { if (e.n === 1) cut.push(e); else if (e.n === 2) score.push(e); else problems.push('rand ' + e.n + '× gebruikt'); }
+  // snijranden aaneenrijgen tot gesloten omtrekken
+  const pk = (p) => r4(p[0]) + ',' + r4(p[1]);
+  const adj = new Map();
+  cut.forEach((e, i) => { for (const p of [e.a, e.b]) { const k = pk(p); (adj.get(k) || adj.set(k, []).get(k)).push(i); } });
+  for (const [k, l] of adj) if (l.length !== 2) problems.push('snijpunt ' + k + ' heeft ' + l.length + ' lijnen');
+  const used = new Set(), loops = [];
+  for (let s = 0; s < cut.length && !problems.length; s++) {
+    if (used.has(s)) continue;
+    const loop = [cut[s].a]; let cur = s, at = cut[s].b; used.add(s);
+    while (pk(at) !== pk(loop[0])) {
+      loop.push(at);
+      const nxt = adj.get(pk(at)).find((i) => !used.has(i));
+      if (nxt === undefined) { problems.push('omtrek niet gesloten'); break; }
+      used.add(nxt); cur = nxt; at = pk(cut[nxt].a) === pk(at) ? cut[nxt].b : cut[nxt].a;
+    }
+    loops.push(loop);
+  }
+  return { cut, score, loops, problems };
+}
+function dashes(a, b, dash = 4, gap = 2) {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (len <= dash) return [[a, b]];
+  const n = Math.max(1, Math.floor((len + gap) / (dash + gap)));
+  const used = n * dash + (n - 1) * gap, start = (len - used) / 2, ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len;
+  const out = [];
+  for (let i = 0; i < n; i++) { const s = start + i * (dash + gap); out.push([[a[0] + ux * s, a[1] + uy * s], [a[0] + ux * (s + dash), a[1] + uy * (s + dash)]]); }
+  return out;
+}
+function nameModel(text, panel) {
+  if (!font || !text.trim()) return null;
+  const m = new makerjs.models.Text(font, text.trim(), 10, false, false, 0.05);
+  let e = makerjs.measure.modelExtents(m);
+  if (!e || e.width <= 0) return null;
+  const s = Math.min(panel.w * 0.8 / e.width, Math.min(panel.h * 0.3, 30) / e.height);
+  makerjs.model.scale(m, s);
+  e = makerjs.measure.modelExtents(m);
+  m.origin = [panel.x + panel.w / 2 - e.center[0], panel.y + panel.h / 2 - e.center[1]];
+  return { model: m, height: e.height, width: e.width };
+}
+function readParams() {
+  const n = (id, d) => { const v = parseFloat(String($(id).value).replace(',', '.')); return Number.isFinite(v) ? v : d; };
+  return { style: $('style').value, L: clamp(n('L', 70), 15, 400), W: clamp(n('W', 45), 15, 400), H: clamp(n('H', 90), 10, 400),
+           t: clamp(n('t', 0.4), 0.1, 1.5), g: clamp(n('g', 12), 5, 30), gt: clamp(n('gt', 12), 5, 30), Hl: clamp(n('Hl', 25), 8, 200), clr: clamp(n('clr', 1), 0, 5),
+           name: $('name').value, nameMode: $('nameMode').value, foldMode: $('foldMode').value, mat: $('mat').value, ruler: $('ruler').checked };
+}
+function build(p) {
+  const mat = MATS[p.mat];
+  const lay = p.style === 'tray' ? trayBox(p, mat[0]) : tuckBox(p);
+  const cls = classify(lay.pieces);
+  const root = { models: {}, units: makerjs.unitType.Millimeter };
+  const cutM = { models: {}, layer: 'snijden' };
+  cls.loops.forEach((loop, i) => { cutM.models['omtrek' + i] = new makerjs.models.ConnectTheDots(true, loop); });
+  const scoreM = { paths: {}, layer: 'rillen' };
+  let si = 0;
+  for (const e of cls.score) {
+    const segs = p.foldMode === 'dash' ? dashes(e.a, e.b) : [[e.a, e.b]];
+    for (const [a, b] of segs) scoreM.paths['r' + (si++)] = new makerjs.paths.Line(a, b);
+  }
+  root.models.snijden = cutM; root.models.rillen = scoreM;
+  const boxExt = makerjs.measure.modelExtents(cutM);
+  const nm = nameModel(p.name, lay.namePanel);
+  if (nm) { nm.model.layer = 'naam'; root.models.naam = nm.model; }
+  let rulerPos = null;
+  if (p.ruler) {
+    const sp = lay.emptyAboveFront;
+    if (p.style !== 'tray' && sp && sp.w >= RULER + 8 && sp.h >= RULER + 6) rulerPos = [sp.x + 3, sp.y + sp.h - RULER - 3];
+    else rulerPos = [boxExt.low[0], boxExt.low[1] - 6 - RULER];
+    const rm = new makerjs.models.Square(RULER); rm.origin = rulerPos; rm.layer = 'meetvierkant';
+    root.models.meetvierkant = rm;
+  }
+  const ext = makerjs.measure.modelExtents(root);
+  const W = ext.width + 2 * MARGIN, H = ext.height + 2 * MARGIN;
+  return { p, lay, cls, root, ext, boxExt, W, H, nm, rulerPos, mat };
+}
+const COLORS = { snijden: '#ff0000', rillen: '#0000ff', naam: '#000000', meetvierkant: '#ff0000' };
+function toSvg(b, preview) {
+  const origin = [-b.ext.low[0] + MARGIN, b.ext.high[1] + MARGIN];
+  const data = makerjs.exporter.toSVGPathData(b.root, { byLayers: true, origin, accuracy: 0.001 });
+  const W = r4(b.W), H = r4(b.H);
+  const colors = Object.assign({}, COLORS, { naam: b.p.nameMode === 'cut' ? '#ff0000' : '#000000' });
+  const sw = preview ? 'stroke-width="1.4" vector-effect="non-scaling-stroke"' : 'stroke-width="0.2"';
+  let g = '';
+  for (const layer of ['snijden', 'rillen', 'naam', 'meetvierkant']) {
+    if (!data[layer]) continue;
+    g += `<g id="${layer}" stroke="${colors[layer]}" fill="none" ${sw} stroke-linecap="round" stroke-linejoin="round"><path d="${data[layer]}"/></g>`;
+  }
+  let extra = '';
+  if (preview) {
+    // snijmat (alleen in het voorbeeld) linksboven uitgelijnd op het ontwerp
+    const [mw, mh] = fitsRotated(b) ? [b.mat[1], b.mat[0]] : b.mat;
+    extra = `<rect x="${MARGIN}" y="${MARGIN}" width="${mw}" height="${mh}" fill="none" stroke="#9aa3c7" stroke-dasharray="2 2" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+    const vbW = Math.max(W, mw + 2 * MARGIN), vbH = Math.max(H, mh + 2 * MARGIN);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="Voorbeeld van de uitslag">${extra}${g}</svg>`;
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}" data-box-width-mm="${r4(b.lay.expected.w)}" data-box-height-mm="${r4(b.lay.expected.h)}">\n<title>Vouwdoosje ${fmt(b.p.L)}×${fmt(b.p.W)}×${fmt(b.p.H)} mm (binnenmaat), rood = snijden, blauw = rillen</title>\n${g}\n</svg>\n`;
+}
+function toDxf(b) {
+  const c = makerjs.exporter.colors;
+  return makerjs.exporter.toDXF(b.root, { units: makerjs.unitType.Millimeter, layerOptions: {
+    snijden: { color: c.red }, rillen: { color: c.blue }, naam: { color: b.p.nameMode === 'cut' ? c.red : c.black }, meetvierkant: { color: c.red } } });
+}
+const fits = (b) => b.W <= b.mat[0] + 1e-6 && b.H <= b.mat[1] + 1e-6;
+const fitsRotated = (b) => !fits(b) && b.H <= b.mat[0] + 1e-6 && b.W <= b.mat[1] + 1e-6;
+
+function render() {
+  const p = readParams();
+  document.body.classList.toggle('tray', p.style === 'tray');
+  $('lgScore').classList.toggle('dash', p.foldMode === 'dash');
+  let b;
+  try { b = build(p); } catch (e) { console.error(e); setStatus('err', 'Er ging iets mis bij het tekenen: ' + e.message); return; }
+  current = b;
+  $('preview').innerHTML = toSvg(b, true);
+  const out = b.outer || b.lay.outer;
+  let html = `<b>Plaatgrootte:</b> ${fmt(b.W)} × ${fmt(b.H)} mm (incl. 1 mm rand${p.ruler ? ' en meetvierkant' : ''}).<br>`;
+  html += `<b>Uitslag doos:</b> ${fmt(b.boxExt.width)} × ${fmt(b.boxExt.height)} mm · ${b.cls.score.length} vouwlijnen · ${b.cls.loops.length} snijomtrek${b.cls.loops.length > 1 ? 'ken' : ''}.<br>`;
+  if (p.style === 'tray') {
+    html += `<b>Bakje buitenmaat:</b> ± ${fmt(b.lay.outer[0])} × ${fmt(b.lay.outer[1])} × ${fmt(b.lay.outer[2])} mm · <b>deksel:</b> ± ${fmt(b.lay.lidOuter[0])} × ${fmt(b.lay.lidOuter[1])} × ${fmt(b.lay.lidOuter[2])} mm.`;
+  } else {
+    html += `<b>Buitenmaat doosje:</b> ± ${fmt(out[0])} × ${fmt(out[1])} × ${fmt(out[2])} mm · lijmrand ${fmt(b.lay.info.g)} mm · insteektong ${fmt(b.lay.info.tongue)} mm.`;
+  }
+  $('info').innerHTML = html;
+  const msgs = [];
+  if (b.cls.problems.length) msgs.push(['err', 'Geometrie klopt niet: ' + b.cls.problems.slice(0, 3).join('; ')]);
+  const [mw, mh] = b.mat;
+  if (fits(b)) {
+    const tight = b.W > mw - 10 || b.H > mh - 10;
+    msgs.push([tight ? 'warn' : 'ok', tight ? `Past op de mat (${fmt(mw)} × ${fmt(mh)} mm), maar krap: leg het karton precies in de hoek.` : `Past op de mat (${fmt(mw)} × ${fmt(mh)} mm).`]);
+  } else if (fitsRotated(b)) {
+    msgs.push(['warn', `Past alleen als je hem in xTool Studio een kwartslag (90°) draait op de mat van ${fmt(mw)} × ${fmt(mh)} mm.`]);
+  } else {
+    msgs.push(['err', `Te groot voor de mat van ${fmt(mw)} × ${fmt(mh)} mm! Maak de doos kleiner${p.mat === '12x12' ? ' of kies de lange mat (12×24 inch)' : ''}. Ook je karton moet zo groot zijn.`]);
+  }
+  if (b.nm && b.nm.height < 6) msgs.push(['warn', `De naam wordt klein (${fmt(b.nm.height)} mm hoog). Een kortere naam wordt groter.`]);
+  if (p.name.trim() && !font) msgs.push(['warn', 'Het lettertype is nog niet geladen; de naam komt er zo bij.']);
+  $('checks').innerHTML = msgs.map(([k, t]) => `<div class="msg ${k}">${t}</div>`).join('');
+  $('dlSvg').disabled = $('dlDxf').disabled = !!b.cls.problems.length;
+  window.__demo.renders++;
+  window.__demo.last = { params: p, W: b.W, H: b.H, box: { w: b.boxExt.width, h: b.boxExt.height }, expected: b.lay.expected, info: b.lay.info,
+    loops: b.cls.loops.length, scores: b.cls.score.length, problems: b.cls.problems, name: b.nm ? { w: b.nm.width, h: b.nm.height } : null, fits: fits(b), fitsRotated: fitsRotated(b) };
+}
+function setStatus(kind, text) { const s = $('status'); s.className = 'msg ' + kind; s.textContent = text; s.style.display = text ? '' : 'none'; }
+function fileBase() {
+  const p = current.p; const st = { 'tuck-rev': 'insteekdoosje', 'tuck-straight': 'insteekdoosje-recht', tray: 'bakje-met-deksel' }[p.style];
+  const nm = p.name.trim() ? '-' + p.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
+  return `${st}-${p.L}x${p.W}x${p.H}mm${nm}`;
+}
+function download(text, name, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+window.__demo = { renders: 0, fontLoaded: false, toSvg: () => toSvg(current, false), toDxf: () => toDxf(current), render };
+$('dlSvg').onclick = () => { download(toSvg(current, false), fileBase() + '.svg', 'image/svg+xml'); setStatus('ok', 'SVG gedownload. Open hem in xTool Studio.'); };
+$('dlDxf').onclick = () => { download(toDxf(current), fileBase() + '.dxf', 'application/dxf'); setStatus('ok', 'DXF gedownload (lagen: snijden, rillen, naam, meetvierkant).'); };
+// handige startmaten per model (alleen als je de maten nog niet zelf hebt veranderd)
+const DEF = { tuck: ['70', '45', '90'], tray: ['75', '55', '40'] };
+$('style').addEventListener('change', () => {
+  const cur = ['L', 'W', 'H'].map((k) => $(k).value).join('x');
+  const to = $('style').value === 'tray' ? DEF.tray : DEF.tuck, from = $('style').value === 'tray' ? DEF.tuck : DEF.tray;
+  if (cur === from.join('x')) ['L', 'W', 'H'].forEach((k, i) => { $(k).value = to[i]; });
+});
+$('form').addEventListener('input', render);
+$('form').addEventListener('change', render);
+render();
+fetch(FONT_URL).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+  .then((buf) => { font = opentype.parse(buf); window.__demo.fontLoaded = true; render(); })
+  .catch((e) => { console.warn('Lettertype niet geladen', e); setStatus('warn', 'Het lettertype kon niet geladen worden; de naam werkt nu niet. Herlaad de pagina.'); });
+})();
+</script>
+</body>
+</html>
