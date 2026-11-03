@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Vouwdoosje-maker voor de xTool C1 (Maker.js) · Tech demo 09</title>
+<title>Vouwdoosje-maker voor de xTool C1 en 3D-print voor de Snapmaker U1 · Tech demo 09</title>
 <style>
   :root { --bg:#f5f6fb; --card:#fff; --fg:#1d2333; --muted:#5d6584; --acc:#4f6bff; --warn:#b45309; --err:#b91c1c; --ok:#15803d; }
   * { box-sizing:border-box; }
@@ -40,9 +40,24 @@
   ol { padding-left:20px; margin:6px 0; } li { margin:4px 0; font-size:14px; line-height:1.45; }
   .only-tray, .only-tuck { }
   body.tray .only-tuck, body:not(.tray) .only-tray { display:none; }
+  .tabs { display:flex; flex-wrap:wrap; gap:8px; padding:8px 20px 0; }
+  .tabs button { background:#e6e9f7; font-weight:600; }
+  .tabs button[aria-selected="true"] { background:var(--acc); color:#fff; }
+  body.m3d .c2d, body:not(.m3d) .c3d { display:none !important; }
+  body.m3d .only-flat-off, body.flat .only-trayl, body:not(.flat) .only-flat { display:none !important; }
+  #view3d { width:100%; height:min(62vh,560px); min-height:320px; background:#eef0f8; border:1px solid #e3e6f2; border-radius:12px; position:relative; overflow:hidden; }
+  #view3d canvas { display:block; width:100%; height:100%; touch-action:none; }
+  #view3d .ov { position:absolute; left:10px; bottom:8px; font-size:12px; color:var(--muted); pointer-events:none; }
+  input[type=color] { width:100%; min-height:40px; border:1px solid #cfd4e6; border-radius:10px; background:#fff; padding:2px; }
   footer { padding:0 20px 24px; font-size:12.5px; color:var(--muted); }
   a { color:var(--acc); }
 </style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
 <script src="https://cdn.jsdelivr.net/npm/bezier-js@2.6.1/bezier.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/makerjs@0.19.2/dist/browser.maker.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
@@ -50,16 +65,30 @@
 <body>
 <header>
   <h1>📦 Vouwdoosje-maker voor de xTool C1</h1>
-  <p>Vul de maten in, kies een model en download een SVG of DXF op ware grootte: rood = snijden, blauw = rillen (vouwlijn). Gemaakt met <a href="https://maker.js.org/" target="_blank" rel="noopener">Maker.js</a>.</p>
+  <p class="c2d">Vul de maten in, kies een model en download een SVG of DXF op ware grootte: rood = snijden, blauw = rillen (vouwlijn). Gemaakt met <a href="https://maker.js.org/" target="_blank" rel="noopener">Maker.js</a>.</p>
+  <p class="c3d">Dezelfde maten en naam, maar dan als <b>3D-print</b> voor de Snapmaker U1: een bakje met deksel, of een plat geprinte vouwdoos met scharniertjes. Download een STL of een 3MF (met de naam als apart deel voor een tweede kleur). Berekend met <a href="https://github.com/elalish/manifold" target="_blank" rel="noopener">Manifold</a>.</p>
 </header>
+<nav class="tabs" role="tablist">
+  <button id="tab2d" role="tab" aria-selected="true">✂️ Karton snijden (xTool C1)</button>
+  <button id="tab3d" role="tab" aria-selected="false">🖨️ 3D-print (Snapmaker U1)</button>
+</nav>
 <main>
   <section class="card" id="form">
+    <div class="c3d">
+      <div class="lbl">3D-model</div>
+      <select id="kind3d">
+        <option value="tray">Bakje met los deksel (2 onderdelen)</option>
+        <option value="flat">Plat printen en vouwen (vouwdoos met scharniertjes)</option>
+      </select>
+    </div>
+    <div class="c2d">
     <div class="lbl">Model</div>
     <select id="style">
       <option value="tuck-rev">Doosje met insteekkleppen (klassiek, kleppen tegenover elkaar)</option>
       <option value="tuck-straight">Doosje met insteekkleppen (beide kleppen aan de achterkant)</option>
       <option value="tray">Bakje met los deksel</option>
     </select>
+    </div>
 
     <div class="lbl">Binnenmaat (mm)</div>
     <div class="grid3">
@@ -69,6 +98,43 @@
     </div>
     <p class="hint">Lengte = voorkant, breedte = zijkant (diepte), hoogte = van bodem tot deksel.</p>
 
+    <div class="c3d">
+      <div class="only-trayl">
+        <div class="lbl">Bakje</div>
+        <div class="grid3">
+          <label class="f">Wand (mm)<input id="p_wall" type="number" min="0.8" max="5" step="0.1" value="1.6"></label>
+          <label class="f">Bodem (mm)<input id="p_floor" type="number" min="0.6" max="5" step="0.1" value="1.2"></label>
+          <label class="f">Hoekradius (mm)<input id="p_radius" type="number" min="0" max="20" step="0.5" value="3"></label>
+        </div>
+        <label class="c"><input id="p_round" type="checkbox"> Afgeronde hoeken</label>
+        <div class="lbl">Deksel</div>
+        <select id="p_lidType">
+          <option value="inset">Insteekdeksel (rand valt in het bakje)</option>
+          <option value="slip">Opzetdeksel (rand valt over het bakje)</option>
+        </select>
+        <div class="grid3" style="margin-top:8px">
+          <label class="f">Speling per kant (mm)<input id="p_clr" type="number" min="0" max="1" step="0.05" value="0.25"></label>
+          <label class="f">Randhoogte (mm)<input id="p_lipH" type="number" min="2" max="30" step="0.5" value="6"></label>
+          <label class="f">Dekseldikte (mm)<input id="p_lidT" type="number" min="0.8" max="5" step="0.1" value="1.2"></label>
+        </div>
+        <p class="hint">Buitenmaat bakje = binnenmaat + 2 × wand. Past het deksel te strak, zet de speling op 0,3–0,4 mm.</p>
+      </div>
+      <div class="only-flat">
+        <div class="lbl">Vouwdoos</div>
+        <div class="grid3">
+          <label class="f">Plaatdikte (mm)<input id="p_panelT" type="number" min="0.6" max="2.5" step="0.1" value="1.0"></label>
+          <label class="f">Scharnier (mm)<input id="p_hingeT" type="number" min="0.2" max="1" step="0.05" value="0.35"></label>
+          <label class="f">Groefbreedte (mm)<input id="p_hingeW" type="number" min="0.6" max="4" step="0.1" value="1.4"></label>
+        </div>
+        <select id="p_groove" style="margin-top:8px">
+          <option value="v">V-groef (vouwt netjes haaks)</option>
+          <option value="flat">Platte groef (rechte goot)</option>
+        </select>
+        <p class="hint">Dezelfde uitslag als het klassieke insteekdoosje. Op elke vouwlijn zit een groefje aan de bovenkant; onderin blijft een dun strookje (het scharnier) over. Vouw met de groefjes naar binnen.</p>
+      </div>
+    </div>
+
+    <div class="c2d">
     <div class="lbl">Karton</div>
     <div class="grid2">
       <label class="f">Dikte (mm)<input id="t" type="number" min="0.1" max="1.5" step="0.05" value="0.4"></label>
@@ -84,9 +150,27 @@
       </div>
       <p class="hint">Het deksel wordt automatisch iets groter dan het bakje (2× de dikte + de speling).</p>
     </div>
+    </div>
 
     <div class="lbl">Naam op de voorkant (optioneel)</div>
     <input id="name" type="text" maxlength="24" placeholder="Bijvoorbeeld: Noa" autocomplete="off">
+    <div class="c3d">
+      <select id="p_nameStyle" style="margin-top:8px">
+        <option value="inlay">Naam ingelegd in de buitenkant (vlak, tweede kleur, aanbevolen)</option>
+        <option value="emboss">Naam in reliëf (0,8 mm hoog)</option>
+      </select>
+      <div class="grid2" style="margin-top:8px">
+        <label class="f">Kleur doosje<input id="p_c1" type="color" value="#f2f2f2"></label>
+        <label class="f">Kleur naam<input id="p_c2" type="color" value="#e0457b"></label>
+      </div>
+      <p class="hint" id="nameHint3d">Bij het bakje komt de naam op het deksel, bij de vouwdoos op de voorkant. Ingelegd: de naam zit in de onderste laagjes (die op het bed liggen) en wordt zo de buitenkant. In de STL (één kleur) is de naam dan een uitsparing.</p>
+      <div class="row">
+        <button class="primary" id="dlStl" disabled>⬇ STL downloaden</button>
+        <button id="dl3mf" disabled>⬇ 3MF downloaden (kleuren)</button>
+      </div>
+      <div id="status3d" class="msg" style="display:none"></div>
+    </div>
+    <div class="c2d">
     <select id="nameMode" style="margin-top:8px">
       <option value="pen">Naam tekenen met een pen (zwarte laag)</option>
       <option value="cut">Naam uitsnijden (rood, snijlaag)</option>
@@ -111,16 +195,37 @@
       <button id="dlDxf" disabled>⬇ DXF downloaden</button>
     </div>
     <div id="status" class="msg" style="display:none"></div>
+    </div>
   </section>
 
   <section>
-    <div class="card">
+    <div class="card c3d">
+      <div id="view3d"><div class="ov">Slepen = draaien · scrollen = zoomen · grijs vlak = printbed 270 × 270 mm</div></div>
+      <div id="info3d"></div>
+      <div id="checks3d"></div>
+    </div>
+    <div class="card c3d" style="margin-top:16px">
+      <b>Zo print je hem op de Snapmaker U1</b>
+      <ol>
+        <li>Download de <b>3MF</b> en open hem in <b>Snapmaker Orca</b> (of Luban). De onderdelen liggen al plat op het bed, in millimeters.</li>
+        <li>Krijg je de vraag of het één object met meerdere delen is: kies <b>Ja</b>. Zo blijft de naam op zijn plek.</li>
+        <li>Geef per object (of per deel) een <b>filament</b>: bijvoorbeeld wit voor het doosje en roze voor de <b>Naam</b>. Op de U1 pakt elke kleur zijn eigen printkop.</li>
+        <li>Eén kleur? Dan kun je ook gewoon de <b>STL</b> nemen.</li>
+      </ol>
+      <div class="only-trayl">
+        <p class="hint">Bakje: laagdikte 0,2 mm, PLA of PETG, geen support nodig. Het deksel ligt ondersteboven (bovenkant op het bed). Kies je de naam in <b>reliëf</b>, dan ligt het deksel met de bovenkant omhoog en heeft de rand eronder <b>support</b> nodig; daarom is <i>ingelegd</i> de standaard.</p>
+      </div>
+      <div class="only-flat">
+        <p class="hint"><b>Plat printen en vouwen:</b> gebruik <b>PETG</b> (aanbevolen): dat blijft buigen. <b>PLA</b> breekt na een paar keer vouwen. <b>TPU</b> is heel buigzaam, maar dan wordt het doosje slap. Print plat, met de scharnieren in de <b>eerste laagjes</b> (zo ligt hij al in het bestand), laagdikte 0,2 mm of fijner en 100% vulling. Vouw daarna met de groefjes naar binnen, rustig en een keer goed door. De lijmrand plak je met secondelijm. Kies je de naam in <b>reliëf</b>, dan komt die aan de bovenkant van de print, en dat wordt de <b>binnenkant</b> van het doosje.</p>
+      </div>
+    </div>
+    <div class="card c2d">
       <div id="preview">Bezig met laden…</div>
       <div class="legend"><span class="l-cut">snijden</span><span class="l-score" id="lgScore">rillen</span><span class="l-pen">pen (naam)</span><span class="l-mat">snijmat (alleen voorbeeld)</span></div>
       <div id="info"></div>
       <div id="checks"></div>
     </div>
-    <div class="card" style="margin-top:16px">
+    <div class="card c2d" style="margin-top:16px">
       <b>Zo snijd je hem op de xTool C1</b>
       <ol>
         <li>Download de <b>SVG</b> en open hem in <b>xTool Studio</b> (Importeren). Het bestand is al op ware grootte in millimeters.</li>
@@ -136,7 +241,7 @@
   </section>
 </main>
 <footer>
-  Gemaakt met <a href="https://github.com/microsoft/maker.js" target="_blank" rel="noopener">Maker.js</a> (Apache-2.0, Microsoft), <a href="https://opentype.js.org/" target="_blank" rel="noopener">opentype.js</a> (MIT) en <a href="https://github.com/Pomax/bezierjs" target="_blank" rel="noopener">bezier-js</a> (MIT). Lettertype: <a href="https://fonts.google.com/specimen/Fredoka" target="_blank" rel="noopener">Fredoka</a> (SIL Open Font License 1.1) via Fontsource. Alles draait in je browser; er wordt niets geüpload.
+  Gemaakt met <a href="https://github.com/microsoft/maker.js" target="_blank" rel="noopener">Maker.js</a> (Apache-2.0, Microsoft), <a href="https://opentype.js.org/" target="_blank" rel="noopener">opentype.js</a> (MIT) en <a href="https://github.com/Pomax/bezierjs" target="_blank" rel="noopener">bezier-js</a> (MIT). Lettertype: <a href="https://fonts.google.com/specimen/Fredoka" target="_blank" rel="noopener">Fredoka</a> (SIL Open Font License 1.1) via Fontsource. 3D-print: <a href="https://github.com/elalish/manifold" target="_blank" rel="noopener">Manifold</a> (Apache-2.0) en <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT). Alles draait in je browser; er wordt niets geüpload.
 </footer>
 
 <script>
@@ -385,6 +490,7 @@ function download(text, name, type) {
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
+window.__box2d = { tuckBox, classify, getFont: () => font };
 window.__demo = { renders: 0, fontLoaded: false, toSvg: () => toSvg(current, false), toDxf: () => toDxf(current), render };
 $('dlSvg').onclick = () => { download(toSvg(current, false), fileBase() + '.svg', 'image/svg+xml'); setStatus('ok', 'SVG gedownload. Open hem in xTool Studio.'); };
 $('dlDxf').onclick = () => { download(toDxf(current), fileBase() + '.dxf', 'application/dxf'); setStatus('ok', 'DXF gedownload (lagen: snijden, rillen, naam, meetvierkant).'); };
@@ -399,9 +505,10 @@ $('form').addEventListener('input', render);
 $('form').addEventListener('change', render);
 render();
 fetch(FONT_URL).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
-  .then((buf) => { font = opentype.parse(buf); window.__demo.fontLoaded = true; render(); })
+  .then((buf) => { font = opentype.parse(buf); window.__demo.fontLoaded = true; render(); window.dispatchEvent(new Event('box-font')); })
   .catch((e) => { console.warn('Lettertype niet geladen', e); setStatus('warn', 'Het lettertype kon niet geladen worden; de naam werkt nu niet. Herlaad de pagina.'); });
 })();
 </script>
+<script type="module" src="./print3d.js"></script>
 </body>
 </html>
