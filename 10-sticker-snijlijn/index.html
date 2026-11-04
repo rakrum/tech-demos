@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Stickermaker met snijlijn (Clipper2) · Tech demo 10</title>
+<style>
+  :root { --bg:#f5f6fb; --card:#fff; --fg:#1d2333; --muted:#5d6584; --acc:#4f6bff; --warn:#b45309; --err:#b91c1c; --ok:#15803d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:16px 20px 4px; }
+  header h1 { margin:0; font-size:22px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:14px; }
+  main { display:grid; grid-template-columns:minmax(300px,390px) 1fr; gap:16px; padding:12px 20px 24px; align-items:start; }
+  @media (max-width:860px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border-radius:14px; padding:14px 16px; box-shadow:0 2px 10px rgba(20,30,80,.07); }
+  .card + .card { margin-top:16px; }
+  .lbl { font-size:12px; color:var(--muted); margin:14px 0 4px; text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+  .grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+  label.f { display:flex; flex-direction:column; font-size:13px; gap:3px; }
+  input[type=number], select { font:inherit; font-size:15px; padding:8px 10px; border:1px solid #cfd4e6; border-radius:10px; background:#fff; width:100%; min-height:40px; }
+  input[type=range] { width:100%; }
+  label.c { display:flex; gap:8px; align-items:center; font-size:14px; margin:6px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; font-size:15px; border:0; border-radius:10px; padding:10px 14px; background:#e6e9f7; color:var(--fg); cursor:pointer; min-height:42px; }
+  button.primary { background:var(--acc); color:#fff; font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  #drop { border:2px dashed #b9c0dc; border-radius:12px; padding:14px; text-align:center; font-size:14px; color:var(--muted); cursor:pointer; }
+  #drop.over { border-color:var(--acc); background:#eef1ff; }
+  #preview { width:100%; min-height:340px; border:1px solid #e3e6f2; border-radius:12px; display:flex; align-items:center; justify-content:center; padding:10px;
+    background-color:#fff; background-image:linear-gradient(45deg,#eceef6 25%,transparent 25%),linear-gradient(-45deg,#eceef6 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eceef6 75%),linear-gradient(-45deg,transparent 75%,#eceef6 75%);
+    background-size:20px 20px; background-position:0 0,0 10px,10px -10px,-10px 0; }
+  #preview svg { width:100%; height:auto; max-height:70vh; filter:drop-shadow(0 1px 3px rgba(0,0,0,.18)); }
+  #info { font-size:14px; line-height:1.55; margin-top:10px; }
+  .msg { padding:8px 10px; border-radius:10px; margin-top:8px; font-size:14px; line-height:1.4; }
+  .msg.ok { background:#e8f7ee; color:var(--ok); } .msg.warn { background:#fff4e5; color:var(--warn); } .msg.err { background:#fdecec; color:var(--err); }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:13px; color:var(--muted); margin-top:8px; }
+  .legend span::before { content:""; display:inline-block; width:22px; height:0; border-top:3px solid currentColor; vertical-align:middle; margin-right:6px; }
+  .l-cut { color:#ff0000; } .l-white { color:#c9cde0; } .l-reg { color:#000; }
+  .hint { font-size:12.5px; color:var(--muted); line-height:1.45; margin:4px 0 0; }
+  .val { font-variant-numeric:tabular-nums; font-weight:600; }
+  ol { padding-left:20px; margin:6px 0; } li { margin:4px 0; font-size:14px; line-height:1.45; }
+  body:not(.sheet) .only-sheet { display:none; }
+  footer { padding:0 20px 24px; font-size:12.5px; color:var(--muted); }
+  a { color:var(--acc); }
+</style>
+<script src="./clipper2z.js"></script>
+</head>
+<body>
+<header>
+  <h1>🏷️ Stickermaker met snijlijn</h1>
+  <p>Sleep een plaatje met een doorzichtige achtergrond erin. De pagina tekent er een witte rand en een rode snijlijn omheen, op ware grootte in mm: printen op de xTool O1, snijden op de xTool C1. Berekend met <a href="https://github.com/ErikSom/Clipper2-WASM" target="_blank" rel="noopener">Clipper2</a>.</p>
+</header>
+<main>
+  <section>
+    <div class="card" id="form">
+      <div class="lbl">1 · Afbeelding</div>
+      <div id="drop" tabindex="0">📂 Sleep hier een PNG, WebP of JPG in<br>of <u>klik om te kiezen</u></div>
+      <input type="file" id="file" accept="image/png,image/webp,image/jpeg,image/gif" hidden>
+      <div class="row">
+        <button id="sample1">🚀 Voorbeeld: raket (PNG)</button>
+        <button id="sample2">🙂 Voorbeeld: smiley (JPG, witte achtergrond)</button>
+      </div>
+      <p class="hint" id="srcinfo">Nog geen afbeelding.</p>
+      <label class="c"><input type="checkbox" id="rmwhite"> Witte achtergrond doorzichtig maken (voor JPG's)</label>
+      <div id="rmbox" hidden>
+        <label class="f">Hoe wit moet de achtergrond zijn? <span><span class="val" id="wthrV">235</span> (hoger = alleen heel wit)</span><input type="range" id="wthr" min="180" max="254" value="235"></label>
+        <label class="c"><input type="checkbox" id="wflood" checked> Alleen wit dat aan de rand vastzit (wit binnenin blijft)</label>
+      </div>
+      <p class="hint">Tip: haal eerst de achtergrond weg met <a href="../04-background-cutout/">demo 04</a> en sleep die PNG hierin.</p>
+
+      <div class="lbl">2 · Maat en rand</div>
+      <div class="grid2">
+        <label class="f">Breedte sticker (mm)<input type="number" id="W" value="60" min="10" max="600" step="1"></label>
+        <label class="f">Witte rand (mm)<input type="number" id="B" value="3" min="0.5" max="20" step="0.5"></label>
+      </div>
+      <p class="hint">De breedte is de buitenmaat van de snijlijn. De hoogte volgt vanzelf.</p>
+      <label class="f" style="margin-top:8px">Gladheid (inhammen afronden) <span><span class="val" id="smV">1,0</span> mm</span><input type="range" id="sm" min="0" max="10" step="0.5" value="1"></label>
+      <label class="c"><input type="checkbox" id="merge" checked> Eén snijlijn (losse stukjes samenvoegen, gaten dichtmaken)</label>
+      <details>
+        <summary style="font-size:13px;color:var(--muted);cursor:pointer;margin-top:6px">Meer instellingen</summary>
+        <label class="f" style="margin-top:8px">Doorzichtig vanaf (alfa-drempel) <span><span class="val" id="athrV">128</span> van 255</span><input type="range" id="athr" min="10" max="245" value="128"></label>
+        <label class="f">Kleine stipjes negeren kleiner dan (mm²)<input type="number" id="minA" value="0.5" min="0" max="50" step="0.1"></label>
+      </details>
+
+      <div class="lbl">3 · Vel (optioneel)</div>
+      <label class="c"><input type="checkbox" id="sheet"> Vel vullen met meerdere stickers</label>
+      <div class="only-sheet">
+        <div class="grid2">
+          <label class="f">Vel
+            <select id="sheetSize">
+              <option value="210x297">A4 staand (210 × 297 mm)</option>
+              <option value="297x210">A4 liggend (297 × 210 mm)</option>
+              <option value="304.8x304.8">C1-snijmat 12 × 12 inch (304,8 mm)</option>
+              <option value="304.8x609.6">C1 lange mat 12 × 24 inch</option>
+            </select></label>
+          <label class="f">Aantal (0 = vol)<input type="number" id="count" value="0" min="0" max="200" step="1"></label>
+          <label class="f">Marge rondom (mm)<input type="number" id="margin" value="10" min="0" max="50" step="1"></label>
+          <label class="f">Tussenruimte (mm)<input type="number" id="gap" value="3" min="0" max="30" step="0.5"></label>
+        </div>
+        <label class="c"><input type="checkbox" id="reg"> Uitlijnmerkjes in de hoeken (zwart, om met de hand uit te lijnen)</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="lbl" style="margin-top:0">4 · Downloaden</div>
+      <div class="row" style="margin-top:4px">
+        <button class="primary" id="dlAll" disabled>⬇️ Sticker-SVG (print + snijlijn)</button>
+      </div>
+      <div class="row">
+        <button id="dlPrintSvg" disabled>Alleen print (SVG)</button>
+        <button id="dlPrintPng" disabled>Alleen print (PNG 300 dpi)</button>
+        <button id="dlCutSvg" disabled>Alleen snijlijn (SVG)</button>
+        <button id="dlCutDxf" disabled>Alleen snijlijn (DXF)</button>
+      </div>
+      <p class="hint">In de SVG zitten twee groepen: <b>print</b> (witte vorm + jouw afbeelding) en <b>snijlijn</b> (rood #ff0000, geen vulling, 0,1 mm). Staat de vel-modus aan, dan krijg je het hele vel.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <div id="preview"><p class="hint">Kies een afbeelding of een voorbeeld om te beginnen.</p></div>
+      <div class="legend"><span class="l-cut">snijlijn (C1)</span><span class="l-white">witte rand (print)</span><span class="l-reg only-sheet">uitlijnmerkjes</span></div>
+      <div id="info"></div>
+      <div id="msgs"></div>
+    </div>
+    <div class="card">
+      <div class="lbl" style="margin-top:0">Zo maak je de sticker</div>
+      <ol>
+        <li><b>Printen op de xTool O1 (UV):</b> open de <b>Sticker-SVG</b> of <b>Alleen print</b> in xTool Studio en print op stickervinyl of stickerpapier. De witte vorm is de witte onderlaag; zet de rode snijlijn uit (niet printen).</li>
+        <li><b>Snijden op de xTool C1:</b> de C1 heeft <b>geen laser</b>, alleen mesjes en pennen. Leg het geprinte vel op de snijmat, open <b>Alleen snijlijn</b> (SVG of DXF) en zet de rode lijn op <b>Snijden</b> (kiss-cut: alleen door het vinyl, niet door het rugpapier).</li>
+        <li><b>Uitlijnen:</b> of xTool Studio automatisch kan <i>printen-en-dan-snijden</i> met uitlijning tussen de O1 en de C1, is <b>nog niet bevestigd</b>. Ga er voorlopig van uit dat je met de hand uitlijnt: leg het vel steeds op dezelfde plek (bijvoorbeeld tegen de linkerbovenhoek van de mat), gebruik dezelfde marge, en snijd eerst één proefsticker. Een ruimere witte rand (3–4 mm) vergeeft kleine verschuivingen.</li>
+      </ol>
+    </div>
+  </section>
+</main>
+<footer>Alles draait in je eigen browser; er wordt niets geüpload. Clipper2 (Angus Johnson) via <a href="https://github.com/ErikSom/Clipper2-WASM" target="_blank" rel="noopener">Clipper2-WASM</a> 0.4.0 van Erik Sombroek, Boost Software License 1.0. Nog niet getest op een echte O1 of C1. · <a href="../">Alle demo's</a></footer>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const nl = (v, d = 1) => Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d });
+const demo = window.__demo = { ready: false, last: null, error: null };
+let C = null;                 // Clipper2 module
+let src = null;               // { canvas (bron, max 2000 px), name }
+let proc = null;              // bewerkte bron (alfa toegepast)
+let result = null;            // laatste berekening
+let procId = 0;
+
+const PROC_MAX = 1000, SRC_MAX = 2000, MARGIN = 1; // MARGIN = mm rond de snijlijn in een losse sticker
+
+// ---------- Clipper2 helpers ----------
+function toPathsD(polys) {
+  const ps = new C.PathsD();
+  for (const poly of polys) {
+    const arr = new Float64Array(poly.length * 3);
+    for (let i = 0; i < poly.length; i++) { arr[i * 3] = poly[i][0]; arr[i * 3 + 1] = poly[i][1]; }
+    const p = new C.PathD(); p.assign(arr); ps.push_back(p); p.delete();
+  }
+  return ps;
+}
+function fromPathsD(ps, del = true) {
+  const out = [];
+  for (let i = 0; i < ps.size(); i++) {
+    const p = ps.get(i); const v = p.view(); const poly = [];
+    for (let j = 0; j + 1 < v.length; j += 3) poly.push([v[j], v[j + 1]]);
+    out.push(poly); p.delete();
+  }
+  if (del) ps.delete();
+  return out;
+}
+const area = (poly) => { let a = 0; for (let i = 0, n = poly.length; i < n; i++) { const p = poly[i], q = poly[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
+function clip(fn, polys, ...args) { const ps = toPathsD(polys); const r = fn(ps, ...args); ps.delete(); return fromPathsD(r); }
+const union = (polys) => clip(C.UnionSelfD, polys, C.FillRule.EvenOdd, 4);
+const unionNZ = (polys) => clip(C.UnionSelfD, polys, C.FillRule.NonZero, 4);
+const inflate = (polys, d) => clip(C.InflatePathsD, polys, d, C.JoinType.Round, C.EndType.Polygon, 2, 4, Math.max(0.005, Math.abs(d) * 0.002));
+const simplify = (polys, eps) => clip(C.SimplifyPathsD, polys, eps, true).filter((p) => p.length >= 3);
+function bbox(polys) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of polys) for (const [x, y] of p) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+  return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
+}
+// positief = buitenrand (na UnionSelf heeft Clipper buitenranden positief, gaten negatief)
+const outers = (polys) => polys.filter((p) => area(p) > 0);
+
+// ---------- afbeelding laden ----------
+function loadImageFromUrl(url, name) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(setSource(im, name)); im.onerror = () => rej(new Error('Kon de afbeelding niet openen.')); im.src = url; });
+}
+function setSource(im, name) {
+  const s = Math.min(1, SRC_MAX / Math.max(im.naturalWidth, im.naturalHeight));
+  const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(im.naturalWidth * s)); cv.height = Math.max(1, Math.round(im.naturalHeight * s));
+  cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+  const isJpg = /\.jpe?g$/i.test(name) || /jpeg/.test(name);
+  // automatisch: geen doorzichtige pixels? stel 'wit weghalen' voor
+  const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+  let transp = 0; for (let i = 3; i < d.length; i += 4 * 7) if (d[i] < 128) transp++;
+  src = { canvas: cv, name, w: im.naturalWidth, h: im.naturalHeight, hasAlpha: transp > 0 };
+  if (!src.hasAlpha) { $('rmwhite').checked = true; $('rmbox').hidden = false; }
+  else if (!isJpg) { $('rmwhite').checked = false; $('rmbox').hidden = true; }
+  $('srcinfo').textContent = `${name} · ${im.naturalWidth} × ${im.naturalHeight} px` + (src.hasAlpha ? ' · heeft een doorzichtige achtergrond' : ' · geen doorzichtige pixels gevonden, dus witte achtergrond weghalen staat aan');
+  prepare();
+  return src;
+}
+function prepare() {
+  if (!src) return;
+  const cv = document.createElement('canvas'); cv.width = src.canvas.width; cv.height = src.canvas.height;
+  const ctx = cv.getContext('2d'); ctx.drawImage(src.canvas, 0, 0);
+  if ($('rmwhite').checked) {
+    const id = ctx.getImageData(0, 0, cv.width, cv.height); const d = id.data; const W = cv.width, H = cv.height, thr = +$('wthr').value;
+    const white = (i) => d[i * 4] >= thr && d[i * 4 + 1] >= thr && d[i * 4 + 2] >= thr && d[i * 4 + 3] > 0;
+    if ($('wflood').checked) {
+      const seen = new Uint8Array(W * H); const st = new Int32Array(W * H); let sp = 0;
+      const push = (i) => { if (!seen[i] && white(i)) { seen[i] = 1; st[sp++] = i; } };
+      for (let x = 0; x < W; x++) { push(x); push((H - 1) * W + x); }
+      for (let y = 0; y < H; y++) { push(y * W); push(y * W + W - 1); }
+      while (sp) { const i = st[--sp]; d[i * 4 + 3] = 0; const x = i % W; if (x > 0) push(i - 1); if (x < W - 1) push(i + 1); if (i >= W) push(i - W); if (i < W * (H - 1)) push(i + W); }
+    } else { for (let i = 0; i < W * H; i++) if (white(i)) d[i * 4 + 3] = 0; }
+    ctx.putImageData(id, 0, 0);
+  }
+  proc = cv; proc.__id = ++procId;
+  schedule();
+}
+
+// ---------- contour (marching squares op het alfakanaal) ----------
+function traceAlpha(cv, thr) {
+  const s = Math.min(1, PROC_MAX / Math.max(cv.width, cv.height));
+  const w = Math.max(1, Math.round(cv.width * s)), h = Math.max(1, Math.round(cv.height * s));
+  const c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
+  const x2 = c2.getContext('2d'); x2.imageSmoothingQuality = 'high'; x2.drawImage(cv, 0, 0, w, h);
+  const d = x2.getImageData(0, 0, w, h).data;
+  const GW = w + 2, GH = h + 2; const A = new Float32Array(GW * GH); // rand van 1 px met alfa 0
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) A[(y + 1) * GW + x + 1] = d[(y * w + x) * 4 + 3];
+  const inside = (i) => A[i] >= thr;
+  const pts = new Map(); const adj = new Map();
+  const pt = (id, x, y) => { if (!pts.has(id)) pts.set(id, [x, y]); return id; };
+  // horizontale rand tussen hoek (x,y) en (x+1,y); verticale tussen (x,y) en (x,y+1); coördinaten in bron-pixels (pixelmidden)
+  const hE = (x, y) => { const i = y * GW + x, a = A[i], b = A[i + 1]; const t = (thr - a) / (b - a); return pt((y * GW + x) * 2, (x + t - 1 + 0.5), (y - 1 + 0.5)); };
+  const vE = (x, y) => { const i = y * GW + x, a = A[i], b = A[i + GW]; const t = (thr - a) / (b - a); return pt((y * GW + x) * 2 + 1, (x - 1 + 0.5), (y + t - 1 + 0.5)); };
+  const link = (p, q) => { (adj.get(p) || adj.set(p, []).get(p)).push(q); (adj.get(q) || adj.set(q, []).get(q)).push(p); };
+  for (let y = 0; y < GH - 1; y++) for (let x = 0; x < GW - 1; x++) {
+    const i = y * GW + x;
+    const code = (inside(i) ? 8 : 0) | (inside(i + 1) ? 4 : 0) | (inside(i + GW + 1) ? 2 : 0) | (inside(i + GW) ? 1 : 0);
+    if (code === 0 || code === 15) continue;
+    const T = () => hE(x, y), B = () => hE(x, y + 1), L = () => vE(x, y), R = () => vE(x + 1, y);
+    switch (code) {
+      case 1: link(L(), B()); break; case 2: link(B(), R()); break; case 3: link(L(), R()); break;
+      case 4: link(T(), R()); break; case 5: link(T(), R()); link(L(), B()); break; case 6: link(T(), B()); break;
+      case 7: link(T(), L()); break; case 8: link(T(), L()); break; case 9: link(T(), B()); break;
+      case 10: link(T(), L()); link(B(), R()); break; case 11: link(T(), R()); break; case 12: link(L(), R()); break;
+      case 13: link(R(), B()); break; case 14: link(L(), B()); break;
+    }
+  }
+  const used = new Set(); const loops = [];
+  for (const start of adj.keys()) {
+    if (used.has(start)) continue;
+    const loop = []; let prev = -1, cur = start;
+    while (cur !== undefined && !used.has(cur)) {
+      used.add(cur); loop.push(pts.get(cur));
+      const n = adj.get(cur); const nx = n[0] !== prev ? n[0] : n[1]; prev = cur; cur = nx;
+    }
+    if (loop.length >= 3) loops.push(loop);
+  }
+  const k = cv.width / w; // terug naar bron-pixels
+  return { loops: loops.map((l) => l.map(([x, y]) => [x * k, y * k])), procW: w, procH: h, k };
+}
+
+// ---------- hoofdberekening ----------
+function compute() {
+  if (!C || !proc) return null;
+  const Wmm = Math.max(10, +$('W').value || 60), B = Math.max(0.1, +$('B').value || 3), sm = +$('sm').value || 0;
+  const merge = $('merge').checked, minA = Math.max(0, +$('minA').value || 0), thr = +$('athr').value;
+  const msgs = [];
+  const tr = traceAlpha(proc, thr);
+  if (!tr.loops.length) return { error: 'Geen vorm gevonden: de afbeelding is helemaal doorzichtig of helemaal dicht. Zet "witte achtergrond doorzichtig maken" aan, of kies een PNG met een doorzichtige achtergrond.' };
+  let shape = union(tr.loops);
+  const bbPx = bbox(outers(shape));
+  if (bbPx.w > proc.width - 2 && bbPx.h > proc.height - 2) msgs.push(['warn', 'De vorm vult de hele afbeelding: is de achtergrond wel doorzichtig? Probeer "witte achtergrond doorzichtig maken".']);
+  const contentW = Wmm - 2 * B;
+  if (contentW < 3) return { error: 'De witte rand is te breed voor deze stickerbreedte. Maak de sticker breder of de rand smaller.' };
+  // eerste schatting van de schaal (mm per bron-pixel); de echte schaal volgt na het filteren van stipjes
+  let s = contentW / bbPx.w;
+  let mm = shape.map((p) => p.map(([x, y]) => [x * s, y * s]));
+  // stipjes en kleine gaatjes weg
+  mm = mm.filter((p) => Math.abs(area(p)) >= minA);
+  if (!outers(mm).length) return { error: 'Na het negeren van kleine stipjes blijft er niets over. Zet "kleine stipjes negeren" lager.' };
+  const bb2 = bbox(outers(mm)); const fix = contentW / bb2.w; s *= fix;
+  mm = mm.map((p) => p.map(([x, y]) => [x * fix, y * fix]));
+  const bbC = bbox(outers(mm));
+  mm = simplify(union(mm), Math.max(0.02, s * 0.35));
+  const outline = mm; // contour van de afbeelding in mm (voor testen)
+  // offset naar buiten met ronde hoeken (Clipper2), daarna sluiten (= gladheid)
+  let cut = unionNZ(inflate(mm, B + sm));
+  if (sm > 0) cut = unionNZ(inflate(cut, -sm));
+  let extra = 0;
+  if (merge) {
+    cut = outers(cut);
+    let k = sm;
+    while (cut.length > 1 && k < Math.max(Wmm, 400)) {
+      k = Math.max(2, k * 2); extra = k;
+      cut = outers(unionNZ(inflate(unionNZ(inflate(mm, B + k)), -k)));
+    }
+    if (cut.length > 1) { cut.sort((a, b) => area(b) - area(a)); cut = [cut[0]]; }
+    if (extra) msgs.push(['ok', `Losse stukjes zijn samengevoegd tot één sticker (inhammen afgerond met ${nl(extra, 0)} mm).`]);
+  }
+  cut = simplify(cut, 0.01);
+  const bbCut = bbox(cut);
+  const ox = MARGIN - bbCut.x0, oy = MARGIN - bbCut.y0;
+  const mv = (polys) => polys.map((p) => p.map(([x, y]) => [x + ox, y + oy]));
+  cut = mv(cut);
+  const outlineMv = mv(outline);
+  const nOut = outers(cut).length, nHoles = cut.length - nOut;
+  if (!merge && nOut > 1) msgs.push(['warn', `De sticker bestaat uit ${nOut} losse stukken. Zet "Eén snijlijn" aan als je één sticker wilt.`]);
+  let perim = 0; for (const p of cut) for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; perim += Math.hypot(b[0] - a[0], b[1] - a[1]); }
+  // het in te sluiten beeld: uitsnede van de bron rond de contour (met 2 px extra)
+  const px0 = Math.max(0, Math.floor(bbC.x0 / s - 2)), py0 = Math.max(0, Math.floor(bbC.y0 / s - 2));
+  const px1 = Math.min(proc.width, Math.ceil(bbC.x1 / s + 2)), py1 = Math.min(proc.height, Math.ceil(bbC.y1 / s + 2));
+  const img = { x: px0 * s + ox, y: py0 * s + oy, w: (px1 - px0) * s, h: (py1 - py0) * s, sx: px0, sy: py0, sw: px1 - px0, sh: py1 - py0 };
+  return { Wmm, B, sm, merge, s, cut, outline: outlineMv, img, stickerW: bbCut.w, stickerH: bbCut.h, docW: bbCut.w + 2 * MARGIN, docH: bbCut.h + 2 * MARGIN, perim, nOut, nHoles, msgs, extra };
+}
+
+// beeld als data-URL (max 600 dpi op ware grootte)
+const imgCache = new Map();
+function imageDataUrl(r) {
+  const key = [r.img.sx, r.img.sy, r.img.sw, r.img.sh, r.img.w.toFixed(2), proc.__id].join(',');
+  if (imgCache.has(key)) return imgCache.get(key);
+  const maxPx = Math.round(r.img.w / 25.4 * 600);
+  const sc = Math.min(1, maxPx / r.img.sw);
+  const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(r.img.sw * sc)); cv.height = Math.max(1, Math.round(r.img.sh * sc));
+  const ctx = cv.getContext('2d'); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(proc, r.img.sx, r.img.sy, r.img.sw, r.img.sh, 0, 0, cv.width, cv.height);
+  const url = cv.toDataURL('image/png'); imgCache.clear(); imgCache.set(key, url); return url;
+}
+
+// ---------- layout (los of vel) ----------
+function layout(r) {
+  if (!$('sheet').checked) return { W: r.docW, H: r.docH, pos: [[0, 0]], sheet: false };
+  const [SW, SH] = $('sheetSize').value.split('x').map(Number);
+  const m = Math.max(0, +$('margin').value || 0), g = Math.max(0, +$('gap').value || 0), want = Math.max(0, Math.floor(+$('count').value || 0));
+  const cw = r.stickerW, ch = r.stickerH;
+  const cols = Math.floor((SW - 2 * m + g) / (cw + g)), rows = Math.floor((SH - 2 * m + g) / (ch + g));
+  const pos = [];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) if (!want || pos.length < want) pos.push([m + i * (cw + g) - MARGIN, m + j * (ch + g) - MARGIN]);
+  return { W: SW, H: SH, pos, sheet: true, cols: Math.max(0, cols), rows: Math.max(0, rows), fits: Math.max(0, cols) * Math.max(0, rows), want, m };
+}
+
+// ---------- export ----------
+const f3 = (v) => (Math.round(v * 1000) / 1000).toString();
+const pathD = (polys, dx = 0, dy = 0) => polys.map((p) => 'M' + p.map(([x, y]) => f3(x + dx) + ' ' + f3(y + dy)).join(' L') + ' Z').join(' ');
+function buildSvg(r, L, parts, preview = false) {
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${f3(L.W)}mm" height="${f3(L.H)}mm" viewBox="0 0 ${f3(L.W)} ${f3(L.H)}">`;
+  const out = [head, `<title>Sticker ${nl(r.stickerW)} x ${nl(r.stickerH)} mm, rand ${nl(r.B)} mm (tech demo 10)</title>`];
+  if (preview && L.sheet) out.push(`<rect x="0" y="0" width="${f3(L.W)}" height="${f3(L.H)}" fill="#f7f8fc" stroke="#9aa3c7" stroke-width="0.4" stroke-dasharray="2 2"/>`);
+  const url = parts.print ? imageDataUrl(r) : null;
+  if (parts.print) {
+    out.push('<g id="print">');
+    for (const [dx, dy] of L.pos) {
+      out.push(`<path d="${pathD(r.cut, dx, dy)}" fill="#ffffff" fill-rule="nonzero" stroke="none"/>`);
+      out.push(`<image x="${f3(r.img.x + dx)}" y="${f3(r.img.y + dy)}" width="${f3(r.img.w)}" height="${f3(r.img.h)}" preserveAspectRatio="none" href="${url}" xlink:href="${url}"/>`);
+    }
+    out.push('</g>');
+  }
+  if (parts.cut) {
+    const sw = preview ? 'stroke-width="1.6" vector-effect="non-scaling-stroke"' : 'stroke-width="0.1"';
+    out.push(`<g id="snijlijn" fill="none" stroke="#ff0000" ${sw}>`);
+    for (const [dx, dy] of L.pos) out.push(`<path d="${pathD(r.cut, dx, dy)}" fill="none" stroke="#ff0000" fill-rule="nonzero"/>`);
+    out.push('</g>');
+  }
+  if (L.sheet && $('reg').checked && parts.reg) {
+    const s = 5, m = Math.max(2, L.m / 2 - s / 2);
+    out.push('<g id="registratie" fill="#000000" stroke="none">');
+    for (const [x, y] of [[m, m], [L.W - m - s, m], [m, L.H - m - s]]) out.push(`<rect x="${f3(x)}" y="${f3(y)}" width="${s}" height="${s}"/>`);
+    out.push('</g>');
+  }
+  out.push('</svg>');
+  return out.join('\n');
+}
+function buildDxf(r, L) {
+  const o = [];
+  const p = (c, v) => o.push(String(c), String(v));
+  p(0, 'SECTION'); p(2, 'HEADER'); p(9, '$ACADVER'); p(1, 'AC1009'); p(9, '$INSUNITS'); p(70, 4); p(9, '$MEASUREMENT'); p(70, 1);
+  p(9, '$EXTMIN'); p(10, 0); p(20, 0); p(9, '$EXTMAX'); p(10, f3(L.W)); p(20, f3(L.H)); p(0, 'ENDSEC');
+  p(0, 'SECTION'); p(2, 'TABLES'); p(0, 'TABLE'); p(2, 'LAYER'); p(70, 1);
+  p(0, 'LAYER'); p(2, 'SNIJLIJN'); p(70, 0); p(62, 1); p(6, 'CONTINUOUS'); p(0, 'ENDTAB'); p(0, 'ENDSEC');
+  p(0, 'SECTION'); p(2, 'ENTITIES');
+  for (const [dx, dy] of L.pos) for (const poly of r.cut) {
+    p(0, 'POLYLINE'); p(8, 'SNIJLIJN'); p(62, 1); p(66, 1); p(10, 0); p(20, 0); p(30, 0); p(70, 1);
+    for (const [x, y] of poly) { p(0, 'VERTEX'); p(8, 'SNIJLIJN'); p(10, f3(x + dx)); p(20, f3(L.H - (y + dy))); p(30, 0); }
+    p(0, 'SEQEND'); p(8, 'SNIJLIJN');
+  }
+  p(0, 'ENDSEC'); p(0, 'EOF');
+  return o.join('\r\n') + '\r\n';
+}
+function buildPng(r, L) {
+  return new Promise((res) => {
+    const dpi = 300, k = dpi / 25.4;
+    const cv = document.createElement('canvas'); cv.width = Math.round(L.W * k); cv.height = Math.round(L.H * k);
+    const ctx = cv.getContext('2d'); const im = new Image();
+    im.onload = () => {
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+      for (const [dx, dy] of L.pos) {
+        ctx.fillStyle = '#ffffff'; ctx.beginPath();
+        for (const poly of r.cut) { poly.forEach(([x, y], i) => (i ? ctx.lineTo(x + dx, y + dy) : ctx.moveTo(x + dx, y + dy))); ctx.closePath(); }
+        ctx.fill('nonzero');
+        ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, r.img.x + dx, r.img.y + dy, r.img.w, r.img.h);
+      }
+      if (L.sheet && $('reg').checked) { const s = 5, m = Math.max(2, L.m / 2 - s / 2); ctx.fillStyle = '#000'; for (const [x, y] of [[m, m], [L.W - m - s, m], [m, L.H - m - s]]) ctx.fillRect(x, y, s, s); }
+      cv.toBlob((b) => res(pngSetDpi(b, dpi)), 'image/png');
+    };
+    im.src = imageDataUrl(r);
+  });
+}
+// pHYs-chunk toevoegen zodat programma's 300 dpi zien
+async function pngSetDpi(blob, dpi) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  const ppm = Math.round(dpi / 0.0254);
+  const chunk = new Uint8Array(21); const dv = new DataView(chunk.buffer);
+  dv.setUint32(0, 9); chunk.set([112, 72, 89, 115], 4); dv.setUint32(8, ppm); dv.setUint32(12, ppm); chunk[16] = 1;
+  let c = 0xffffffff; for (let i = 4; i < 17; i++) { c ^= chunk[i]; for (let j = 0; j < 8; j++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); }
+  dv.setUint32(17, (c ^ 0xffffffff) >>> 0);
+  const at = 33; // na IHDR
+  const out = new Uint8Array(buf.length + 21); out.set(buf.subarray(0, at)); out.set(chunk, at); out.set(buf.subarray(at), at + 21);
+  return new Blob([out], { type: 'image/png' });
+}
+function save(data, name, type) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+const baseName = () => 'sticker-' + (src ? src.name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-').toLowerCase() : 'x') + ($('sheet').checked ? '-vel' : '') + `-${Math.round(+$('W').value)}mm`;
+
+// ---------- weergave ----------
+let timer = 0;
+function schedule() { clearTimeout(timer); timer = setTimeout(render, 120); }
+function render() {
+  if (!C || !proc) return;
+  const msgs = $('msgs'); msgs.innerHTML = '';
+  let r;
+  try { r = compute(); } catch (e) { r = { error: 'Er ging iets mis bij het rekenen: ' + (e.message || e) }; console.error(e); }
+  const dis = (v) => ['dlAll', 'dlPrintSvg', 'dlPrintPng', 'dlCutSvg', 'dlCutDxf'].forEach((id) => ($(id).disabled = v));
+  if (!r || r.error) { result = null; dis(true); $('info').innerHTML = ''; msgs.innerHTML = `<div class="msg err">${r ? r.error : ''}</div>`; demo.last = { error: r && r.error }; return; }
+  result = r; const L = layout(r); r.L = L;
+  $('preview').innerHTML = buildSvg(r, L, { print: true, cut: true, reg: true }, true);
+  let info = `Sticker: <span class="val">${nl(r.stickerW)} × ${nl(r.stickerH)} mm</span> (buitenmaat snijlijn) · witte rand <span class="val">${nl(r.B)} mm</span><br>` +
+    `Snijlijn: <span class="val">${r.nOut}</span> ${r.nOut === 1 ? 'vorm' : 'vormen'}${r.nHoles ? ` + ${r.nHoles} ${r.nHoles === 1 ? 'gat' : 'gaten'}` : ''}, lengte <span class="val">${nl(r.perim / 10)} cm</span> · afbeelding <span class="val">${nl(r.img.w)} × ${nl(r.img.h)} mm</span>`;
+  if (L.sheet) {
+    info += `<br>Vel: <span class="val">${nl(L.W)} × ${nl(L.H)} mm</span> · <span class="val">${L.pos.length}</span> stickers (${L.cols} × ${L.rows} past)`;
+    if (!L.pos.length) msgs.innerHTML += '<div class="msg err">De sticker past niet op dit vel met deze marge. Maak hem kleiner of kies een groter vel.</div>';
+    else if (L.want && L.want > L.fits) msgs.innerHTML += `<div class="msg warn">Er passen er maar ${L.fits} op dit vel, niet ${L.want}.</div>`;
+  }
+  $('info').innerHTML = info;
+  for (const [t, m] of r.msgs) msgs.innerHTML += `<div class="msg ${t}">${m}</div>`;
+  dis(L.sheet && !L.pos.length);
+  demo.last = { stickerW: r.stickerW, stickerH: r.stickerH, docW: L.W, docH: L.H, border: r.B, nOut: r.nOut, nHoles: r.nHoles, perim: r.perim, copies: L.pos.length, merged: r.extra, msgs: r.msgs.map((m) => m[1]) };
+  demo.outline = r.outline; demo.cut = r.cut;
+}
+
+// ---------- events ----------
+function bind() {
+  const drop = $('drop'), file = $('file');
+  drop.onclick = () => file.click();
+  drop.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') file.click(); };
+  const handle = (f) => { if (!f) return; if (!/^image\//.test(f.type)) { $('msgs').innerHTML = '<div class="msg err">Dat is geen afbeelding. Kies een PNG, WebP of JPG.</div>'; return; } const u = URL.createObjectURL(f); loadImageFromUrl(u, f.name).catch((e) => ($('msgs').innerHTML = `<div class="msg err">${e.message}</div>`)); };
+  file.onchange = () => handle(file.files[0]);
+  ['dragenter', 'dragover'].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'drop' || e.target === drop) drop.classList.remove('over'); }));
+  document.addEventListener('drop', (e) => handle(e.dataTransfer.files[0]));
+  $('sample1').onclick = () => { $('rmwhite').checked = false; $('rmbox').hidden = true; loadImageFromUrl('voorbeeld-raket.png', 'voorbeeld-raket.png'); };
+  $('sample2').onclick = () => loadImageFromUrl('voorbeeld-smiley-wit.jpg', 'voorbeeld-smiley-wit.jpg');
+  $('rmwhite').onchange = () => { $('rmbox').hidden = !$('rmwhite').checked; prepare(); };
+  $('wthr').oninput = () => { $('wthrV').textContent = $('wthr').value; clearTimeout(timer); timer = setTimeout(prepare, 150); };
+  $('wflood').onchange = prepare;
+  $('sm').oninput = () => { $('smV').textContent = nl($('sm').value); schedule(); };
+  $('athr').oninput = () => { $('athrV').textContent = $('athr').value; schedule(); };
+  for (const id of ['W', 'B', 'merge', 'minA', 'sheetSize', 'count', 'margin', 'gap', 'reg']) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); }
+  $('sheet').onchange = () => { document.body.classList.toggle('sheet', $('sheet').checked); schedule(); };
+  const L = () => result.L;
+  $('dlAll').onclick = () => save(buildSvg(result, L(), { print: true, cut: true, reg: true }), baseName() + '.svg', 'image/svg+xml');
+  $('dlPrintSvg').onclick = () => save(buildSvg(result, L(), { print: true, cut: false, reg: true }), baseName() + '-print.svg', 'image/svg+xml');
+  $('dlPrintPng').onclick = async () => save(await buildPng(result, L()), baseName() + '-print-300dpi.png');
+  $('dlCutSvg').onclick = () => save(buildSvg(result, L(), { print: false, cut: true, reg: true }), baseName() + '-snijlijn.svg', 'image/svg+xml');
+  $('dlCutDxf').onclick = () => save(buildDxf(result, L()), baseName() + '-snijlijn.dxf', 'application/dxf');
+}
+
+bind();
+Clipper2ZFactory({ locateFile: (p) => './' + p }).then((mod) => {
+  C = mod; demo.ready = true;
+  return loadImageFromUrl('voorbeeld-raket.png', 'voorbeeld-raket.png');
+}).catch((e) => { demo.error = String(e); $('msgs').innerHTML = `<div class="msg err">Clipper2 kon niet laden: ${e.message || e}</div>`; });
+</script>
+</body>
+</html>
