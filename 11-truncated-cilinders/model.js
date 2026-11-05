@@ -10,10 +10,11 @@ export const MIN_WALL = 0.8;
 export const PRESETS = {
   telefoon: { kind: 'cilinder', diameter: 70, height: 65, cutMode: 'angle', cutAngle: 60, cutHeight: 20, wall: 0, segments: 96 },
   plantenpot: { kind: 'kegel', bottomDiameter: 65, topDiameter: 85, height: 75, cutMode: 'angle', cutAngle: 0, cutHeight: 0, wall: 2, segments: 96 },
+  sleeve: { kind: 'cilinder', diameter: 80, height: 110, cutMode: 'angle', cutAngle: 0, cutHeight: 0, wall: 2, openBottom: true, segments: 128 },
   doorvoer: { kind: 'ring', outerDiameter: 30, innerDiameter: 18, wallMode: 'inner', wall: 6, height: 10, chamfer: 0.8, segments: 64 },
 };
 
-function makeLoops(p, inner = false) {
+function makeLoops(p, inner = false, openBottom = false) {
   const count = p.kind === 'piramide' ? p.sides : p.segments;
   const wall = inner ? p.wall : 0;
   const topZ = (y) => p.cutMode === 'height' ? p.cutHeight : p.height - Math.tan(radians(p.cutAngle)) * y;
@@ -29,7 +30,7 @@ function makeLoops(p, inner = false) {
   };
   const bottom = [], top = [];
   for (let i = 0; i < count; i++) {
-    bottom.push(point(i, wall));
+    bottom.push(point(i, openBottom ? 0 : wall));
     const probe = point(i, p.height);
     top.push(point(i, topZ(probe[1])));
   }
@@ -37,7 +38,7 @@ function makeLoops(p, inner = false) {
 }
 
 // A direct, quad-based closed shell. Each edge occurs exactly twice, including hollow rims.
-function shellGeometry(bottom, top, innerBottom = null, innerTop = null) {
+function shellGeometry(bottom, top, innerBottom = null, innerTop = null, openBottom = false) {
   const points = [], faces = [];
   const loop = (lp) => { const start = points.length; points.push(...lp); return [...lp.keys()].map(i => start + i); };
   const ob = loop(bottom), ot = loop(top);
@@ -48,7 +49,8 @@ function shellGeometry(bottom, top, innerBottom = null, innerTop = null) {
   if (!innerTop) { cap(ob,false); cap(ot,true); }
   else {
     const ib=loop(innerBottom), it=loop(innerTop);
-    cap(ob,false); cap(ib,true);
+    if (openBottom) { for(let i=0;i<n;i++){ const j=(i+1)%n; quad(ob[i],ib[i],ib[j],ob[j]); } }
+    else { cap(ob,false); cap(ib,true); }
     for(let i=0;i<n;i++) { const j=(i+1)%n; quad(ib[j],ib[i],it[i],it[j]); quad(ot[i],ot[j],it[j],it[i]); }
   }
   return primitives.polyhedron({ points, faces, orientation: 'outward' });
@@ -74,8 +76,9 @@ export function buildShape(input) {
   if (p.kind === 'ring') return ringGeometry(p);
   const outer=makeLoops(p,false);
   if (!p.wall) return shellGeometry(outer.bottom,outer.top);
-  const inner=makeLoops(p,true);
-  return shellGeometry(outer.bottom,outer.top,inner.bottom,inner.top);
+  const open=!!p.openBottom;
+  const inner=makeLoops(p,true,open);
+  return shellGeometry(outer.bottom,outer.top,inner.bottom,inner.top,open);
 }
 
 export function validateParams(p) {

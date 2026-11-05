@@ -10,14 +10,15 @@ let buildTimer, framedKey='';
 const DEFAULTS = {
   kind:'cilinder', diameter:50, height:40, bottomDiameter:60, topDiameter:30,
   bottomSide:50, topSide:30, sides:6, outerDiameter:30, innerDiameter:18,
-  wallMode:'wall', wall:2, solid:false, cutMode:'angle', cutAngle:25, cutHeight:20,
+  wallMode:'wall', wall:2, solid:false, openBottom:false, cutMode:'angle', cutAngle:25, cutHeight:20,
   chamfer:0.8, segments:64,
 };
 
 function readParams() {
-  const p = { kind:$('kind').value, wallMode:$('wallMode').value, cutMode:$('cutMode').value, solid:$('solid').checked };
+  const p = { kind:$('kind').value, wallMode:$('wallMode').value, cutMode:$('cutMode').value, solid:$('solid').checked, openBottom:$('openBottom').checked };
   for (const id of ['diameter','height','bottomDiameter','topDiameter','bottomSide','topSide','sides','outerDiameter','innerDiameter','wall','cutAngle','cutHeight','chamfer','segments']) p[id]=Number($(id).value);
   if (p.solid) p.wall = 0;
+  if (p.solid || p.kind==='ring') p.openBottom = false;
   return p;
 }
 function writeParams(p) {
@@ -41,6 +42,8 @@ function syncVisibility() {
   $('solid').closest('label').hidden=k==='ring';
   if(k==='ring' && $('solid').checked) { $('solid').checked=false; }
   $('wall').closest('label').classList.toggle('disabled',$('solid').checked && k!=='ring');
+  if($('solid').checked || k==='ring') $('openBottom').checked=false;
+  $('openBottom').closest('label').hidden=k==='ring' || $('solid').checked;
   $('segmentsValue').textContent=$('segments').value;
 }
 function updateWallFromInner() {
@@ -62,7 +65,7 @@ function rebuild() {
     const volumeCm=info.volume/1000;
     $('readout').innerHTML=`<b>Buitenmaten:</b> ${info.size.map(v=>nf(v,2)).join(' × ')} mm<br><b>Volume:</b> ${nf(volumeCm,1)} cm³ · <b>Driehoeken:</b> ${info.triangles}<br><span class="ok-text">✓ Gesloten model, klaar om te slicen</span>`;
     const msgs=[];
-    if (p.kind!=='ring') msgs.push(p.wall===0 ? ['ok','Massief model. Kies een wanddikte voor een open bakje.'] : ['ok',`Hol model met ${nf(p.wall,1)} mm wand en bodem. De binnenzijde volgt de schuine snede.`]);
+    if (p.kind!=='ring') msgs.push(p.wall===0 ? ['ok','Massief model. Kies een wanddikte voor een open bakje.'] : ['ok',(p.openBottom ? `Hol model met ${nf(p.wall,1)} mm wand, open bodem (kijkgat). Handig als sleeve om een tumbler of fles.` : `Hol model met ${nf(p.wall,1)} mm wand en bodem. De binnenzijde volgt de schuine snede.`)]);
     if (p.kind==='ring') msgs.push(['ok',`Doorvoergat Ø ${nf((p.wallMode==='inner'?p.innerDiameter:p.outerDiameter-2*p.wall),1)} mm${p.chamfer?` · afschuining ${nf(p.chamfer,1)} mm`:''}.`]);
     if (Math.max(info.size[0],info.size[1])>270 || info.size[2]>270) msgs.push(['warn','Past niet binnen 270 × 270 × 270 mm van de Snapmaker U1. Verklein de maten.']);
     else msgs.push(['ok','Past binnen het maximale bouwvolume van de Snapmaker U1 (270 mm).']);
@@ -95,12 +98,12 @@ function resize(){const w=host.clientWidth||600,h=host.clientHeight||400;rendere
 new ResizeObserver(resize).observe(host);resize();
 (function loop(){controls.update();renderer.render(scene,camera);requestAnimationFrame(loop);})();
 
-function filename(ext){const p=state.params;const kind={cilinder:'afgeknotte-cilinder',kegel:'afgeknotte-kegel',piramide:'afgeknotte-piramide',ring:'buis-ring'}[p.kind];return `${kind}-${p.wall>0?'hol-'+String(p.wall).replace('.','p')+'mm':'massief'}.${ext}`;}
+function filename(ext){const p=state.params;const kind={cilinder:'afgeknotte-cilinder',kegel:'afgeknotte-kegel',piramide:'afgeknotte-piramide',ring:'buis-ring'}[p.kind];return `${kind}-${p.wall>0?'hol-'+String(p.wall).replace('.','p')+'mm'+(p.openBottom?'-open-bodem':''):'massief'}.${ext}`;}
 function download(data,name,type){const url=URL.createObjectURL(new Blob([data],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 $('dlStl').onclick=()=>{if(state.ready){const b=stlBytes(state.geometry);download(b,filename('stl'),'model/stl');$('status').textContent=`STL gedownload: ${nf(b.length/1024,0)} kB, binair, maten in mm.`;}};
 $('dl3mf').onclick=()=>{if(state.ready){const b=threeMFBytes(state.geometry,filename('3mf'));download(b,filename('3mf'),'model/3mf');$('status').textContent=`3MF gedownload: ${nf(b.length/1024,0)} kB. Open als één object in Snapmaker Orca.`;}};
 $('reset').onclick=()=>writeParams(DEFAULTS);
 $('form').addEventListener('input',(e)=>{updateWallFromInner();clearTimeout(buildTimer);buildTimer=setTimeout(rebuild,80);});
 $('form').addEventListener('change',()=>{updateWallFromInner();rebuild();});
-for(const b of document.querySelectorAll('[data-preset]'))b.onclick=()=>writeParams({...DEFAULTS,...PRESETS[b.dataset.preset],solid:PRESETS[b.dataset.preset].wall===0});
+for(const b of document.querySelectorAll('[data-preset]'))b.onclick=()=>writeParams({...DEFAULTS,...PRESETS[b.dataset.preset],solid:PRESETS[b.dataset.preset].wall===0,openBottom:!!PRESETS[b.dataset.preset].openBottom});
 writeParams(DEFAULTS);
