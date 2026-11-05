@@ -14,7 +14,7 @@ Alles draait in je eigen browser: geen accounts, uploads, API-sleutels of runtim
 6. Download **STL** of **3MF**. Beide bevatten hetzelfde ene gesloten object in millimeters.
 
 
-Voorbeelden: telefoonstandaard (schuin massief blok), plantenpot (holle afgeknotte kegel) doorvoerring met afschuining en een tumbler-sleeve (Ø 80 × 110 mm, 2 mm wand, zonder bodem; voorbeeldmaat, meet je eigen tumbler).
+Voorbeelden: telefoonstandaard (schuin massief blok), plantenpot (holle afgeknotte kegel) doorvoerring met afschuining en een tumbler-sleeve (licht taps: onder Ø 80, boven Ø 74, hoogte 110 mm, 2 mm wand, zonder bodem; voorbeeldmaten, meet onder- en bovendiameter van je eigen tumbler).
 
 ## Techniek en printen
 

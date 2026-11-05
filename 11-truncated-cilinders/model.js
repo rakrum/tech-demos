@@ -10,7 +10,7 @@ export const MIN_WALL = 0.8;
 export const PRESETS = {
   telefoon: { kind: 'cilinder', diameter: 70, height: 65, cutMode: 'angle', cutAngle: 60, cutHeight: 20, wall: 0, segments: 96 },
   plantenpot: { kind: 'kegel', bottomDiameter: 65, topDiameter: 85, height: 75, cutMode: 'angle', cutAngle: 0, cutHeight: 0, wall: 2, segments: 96 },
-  sleeve: { kind: 'cilinder', diameter: 80, height: 110, cutMode: 'angle', cutAngle: 0, cutHeight: 0, wall: 2, openBottom: true, segments: 128 },
+  sleeve: { kind: 'kegel', bottomDiameter: 80, topDiameter: 74, height: 110, cutMode: 'angle', cutAngle: 0, cutHeight: 0, wall: 2, openBottom: true, segments: 128 },
   doorvoer: { kind: 'ring', outerDiameter: 30, innerDiameter: 18, wallMode: 'inner', wall: 6, height: 10, chamfer: 0.8, segments: 64 },
 };
 

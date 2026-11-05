@@ -5,7 +5,7 @@ import { buildShape, geometryInfo, stlBytes, threeMFBytes, validateParams, PRESE
 const $ = (id) => document.getElementById(id);
 const nf = (v, d=1) => Number(v).toLocaleString('nl-NL', {maximumFractionDigits:d});
 const state = window.__demo11 = { ready:false, builds:0, geometry:null, info:null, params:null, error:null };
-let buildTimer, framedKey='';
+let buildTimer, framedKey='', lastKind='cilinder';
 
 const DEFAULTS = {
   kind:'cilinder', diameter:50, height:40, bottomDiameter:60, topDiameter:30,
@@ -26,7 +26,7 @@ function writeParams(p) {
     const el=$(k); if (!el) continue;
     if (el.type==='checkbox') el.checked=!!v; else el.value=v;
   }
-  syncVisibility(); rebuild();
+  lastKind=$('kind').value; syncVisibility(); rebuild();
 }
 function syncVisibility() {
   const k=$('kind').value;
@@ -63,7 +63,8 @@ function rebuild() {
     state.geometry=geometry; state.info=info; state.params=p; state.builds++; state.ready=true;
     showModel(info);
     const volumeCm=info.volume/1000;
-    $('readout').innerHTML=`<b>Buitenmaten:</b> ${info.size.map(v=>nf(v,2)).join(' × ')} mm<br><b>Volume:</b> ${nf(volumeCm,1)} cm³ · <b>Driehoeken:</b> ${info.triangles}<br><span class="ok-text">✓ Gesloten model, klaar om te slicen</span>`;
+    const taper = p.kind==='kegel' ? `<br><b>Onder Ø</b> ${nf(p.bottomDiameter,1)} mm · <b>Boven Ø</b> ${nf(p.topDiameter,1)} mm` : p.kind==='piramide' ? `<br><b>Onderzijde</b> ${nf(p.bottomSide,1)} mm · <b>Bovenzijde</b> ${nf(p.topSide,1)} mm` : p.kind==='cilinder' ? `<br><b>Diameter</b> ${nf(p.diameter,1)} mm` : '';
+    $('readout').innerHTML=`<b>Buitenmaten:</b> ${info.size.map(v=>nf(v,2)).join(' × ')} mm${taper}<br><b>Volume:</b> ${nf(volumeCm,1)} cm³ · <b>Driehoeken:</b> ${info.triangles}<br><span class="ok-text">✓ Gesloten model, klaar om te slicen</span>`;
     const msgs=[];
     if (p.kind!=='ring') msgs.push(p.wall===0 ? ['ok','Massief model. Kies een wanddikte voor een open bakje.'] : ['ok',(p.openBottom ? `Hol model met ${nf(p.wall,1)} mm wand, open bodem (kijkgat). Handig als sleeve om een tumbler of fles.` : `Hol model met ${nf(p.wall,1)} mm wand en bodem. De binnenzijde volgt de schuine snede.`)]);
     if (p.kind==='ring') msgs.push(['ok',`Doorvoergat Ø ${nf((p.wallMode==='inner'?p.innerDiameter:p.outerDiameter-2*p.wall),1)} mm${p.chamfer?` · afschuining ${nf(p.chamfer,1)} mm`:''}.`]);
@@ -104,6 +105,7 @@ $('dlStl').onclick=()=>{if(state.ready){const b=stlBytes(state.geometry);downloa
 $('dl3mf').onclick=()=>{if(state.ready){const b=threeMFBytes(state.geometry,filename('3mf'));download(b,filename('3mf'),'model/3mf');$('status').textContent=`3MF gedownload: ${nf(b.length/1024,0)} kB. Open als één object in Snapmaker Orca.`;}};
 $('reset').onclick=()=>writeParams(DEFAULTS);
 $('form').addEventListener('input',(e)=>{updateWallFromInner();clearTimeout(buildTimer);buildTimer=setTimeout(rebuild,80);});
+$('kind').addEventListener('change',()=>{const d=Number($('diameter').value);if($('kind').value==='kegel'&&lastKind==='cilinder'){$('bottomDiameter').value=d;$('topDiameter').value=d;}else if($('kind').value==='cilinder'&&lastKind==='kegel'){$('diameter').value=$('bottomDiameter').value;}lastKind=$('kind').value;});
 $('form').addEventListener('change',()=>{updateWallFromInner();rebuild();});
 for(const b of document.querySelectorAll('[data-preset]'))b.onclick=()=>writeParams({...DEFAULTS,...PRESETS[b.dataset.preset],solid:PRESETS[b.dataset.preset].wall===0,openBottom:!!PRESETS[b.dataset.preset].openBottom});
 writeParams(DEFAULTS);
