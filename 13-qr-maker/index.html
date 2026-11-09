@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>QR-maker · 3D-print en UV-print</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; --warn:#b5651d; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1100px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .layout { display:grid; grid-template-columns:minmax(300px,400px) 1fr; gap:16px; align-items:start; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .pad { padding:12px 14px; }
+    .seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; flex-wrap:wrap; }
+    .seg button { border:0; background:#fff; padding:7px 12px; font-size:.92rem; cursor:pointer; color:var(--ink); border-right:1px solid var(--line); }
+    .seg button:last-child { border-right:0; }
+    .seg button.on { background:var(--accent); color:#fff; }
+    .fields { display:grid; gap:10px; margin-top:12px; font-size:.92rem; }
+    .fields[hidden] { display:none; }
+    .fields label, .grid label { display:flex; flex-direction:column; gap:4px; }
+    .fields label.row, .grid label.row { flex-direction:row; align-items:center; gap:8px; }
+    input[type=text], input[type=url], input[type=tel], input[type=email], input[type=password], input[type=number], select, textarea {
+      font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); width:100%; }
+    textarea { min-height:64px; resize:vertical; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; font-size:.92rem; margin-top:12px; }
+    .grid .full { grid-column:1 / -1; }
+    .hint { color:var(--muted); font-size:.82rem; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    #view { width:100%; height:min(56vh,460px); display:block; background:linear-gradient(#eef1f8,#dfe4ef); }
+    .previews { display:grid; grid-template-columns:2fr 1fr; gap:0; }
+    .flat { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:12px; border-left:1px solid var(--line);
+      background-image:linear-gradient(45deg,#f0f0f0 25%,transparent 25%),linear-gradient(-45deg,#f0f0f0 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f0f0f0 75%),linear-gradient(-45deg,transparent 75%,#f0f0f0 75%);
+      background-size:16px 16px; background-position:0 0,0 8px,8px -8px,-8px 0; }
+    .flat img { max-width:100%; max-height:300px; }
+    .info { font-size:.9rem; color:var(--muted); padding:10px 14px; border-top:1px solid var(--line); min-height:1.2em; }
+    .info.warn { color:var(--warn); }
+    .info.err { color:#c0392b; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; margin:6px 0; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+    @media (max-width:860px) { .layout { grid-template-columns:1fr; } .previews { grid-template-columns:1fr; } .flat { border-left:0; border-top:1px solid var(--line); } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🔳 QR-maker</h1>
+  <p class="sub">Typ een link, je wifi-gegevens of een visitekaartje en krijg een QR-code als 3D-print (twee kleuren, Snapmaker U1) of als SVG op ware grootte (UV-print op de xTool O1, snijden op de xTool C1).</p>
+
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>1. Wat moet erin?</h2>
+        <div class="pad">
+          <div class="seg" id="mode">
+            <button data-m="tekst" class="on">🔗 Link/tekst</button>
+            <button data-m="wifi">📶 Wi-Fi</button>
+            <button data-m="vcard">👤 Visitekaartje</button>
+          </div>
+          <div class="fields" data-for="tekst">
+            <label>Link of tekst<textarea id="txt">https://tech-demos-henna.vercel.app/</textarea></label>
+          </div>
+          <div class="fields" data-for="wifi" hidden>
+            <label>Netwerknaam (SSID)<input type="text" id="ssid" value="MijnWifi" autocomplete="off"></label>
+            <label>Wachtwoord<input type="text" id="wpass" value="" autocomplete="off" placeholder="wachtwoord"></label>
+            <label>Beveiliging<select id="wsec"><option value="WPA" selected>WPA/WPA2/WPA3</option><option value="WEP">WEP</option><option value="geen">Geen (open netwerk)</option></select></label>
+            <label class="row"><input type="checkbox" id="whid"> Verborgen netwerk</label>
+            <span class="hint">Je wachtwoord blijft in je browser; het staat straks wel leesbaar in de QR-code.</span>
+          </div>
+          <div class="fields" data-for="vcard" hidden>
+            <label>Naam<input type="text" id="vname" value="" placeholder="Voornaam Achternaam"></label>
+            <label>Telefoon<input type="tel" id="vtel" value="" placeholder="+31 6 12345678"></label>
+            <label>E-mail<input type="email" id="vmail" value="" placeholder="naam@voorbeeld.nl"></label>
+            <label>Bedrijf<input type="text" id="vorg" value=""></label>
+            <label>Website<input type="url" id="vurl" value="" placeholder="https://"></label>
+            <span class="hint">Hoe meer velden, hoe meer blokjes. Voor een sleutelhanger: houd het kort.</span>
+          </div>
+          <div class="grid">
+            <label>Foutcorrectie<select id="ecc"><option value="L">L · minste blokjes (7%)</option><option value="M" selected>M · standaard (15%)</option><option value="Q">Q · steviger (25%)</option><option value="H">H · sterkst (30%)</option></select></label>
+            <label>Witte rand (stille zone)<select id="quiet"><option value="1">1 blokje</option><option value="2" selected>2 blokjes</option><option value="3">3 blokjes</option><option value="4">4 blokjes (officieel)</option></select></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. Vorm en maten</h2>
+        <div class="pad">
+          <div class="seg" id="presets">
+            <button data-p="plaatje" class="on">🪧 Plaatje</button>
+            <button data-p="onderzetter">☕ Onderzetter</button>
+            <button data-p="sleutelhanger">🔑 Sleutelhanger</button>
+          </div>
+          <div class="grid">
+            <label>Vorm<select id="shape"><option value="vierkant">Vierkant</option><option value="rond">Rond</option></select></label>
+            <label>Maat (mm)<input type="number" id="size" min="20" max="250" step="1" value="60"></label>
+            <label>Plaatdikte (mm)<input type="number" id="baseT" min="0.6" max="10" step="0.2" value="2"></label>
+            <label>Hoogte QR (mm)<input type="number" id="modH" min="0.2" max="5" step="0.2" value="1"></label>
+            <label>Hoekradius (mm)<input type="number" id="radius" min="0" max="30" step="0.5" value="4"></label>
+            <label class="row" style="align-self:end"><input type="checkbox" id="loop"> Oogje voor sleutelring</label>
+            <label>Kleur plaat<input type="color" id="cBase" value="#ffffff"></label>
+            <label>Kleur QR<input type="color" id="cQR" value="#111111"></label>
+          </div>
+          <p class="hint">Houd de plaat licht en de QR donker; anders lezen veel telefoons hem niet.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>3. Voorbeeld</h2>
+        <div class="previews">
+          <canvas id="view"></canvas>
+          <div class="flat"><img id="flat" alt="QR-code als SVG"><span class="hint">Scan dit plaatje met je telefoon om te testen.</span></div>
+        </div>
+        <div class="info" id="info"></div>
+      </div>
+
+      <div class="card">
+        <h2>4. Downloaden</h2>
+        <div class="pad">
+          <div class="bar">
+            <button class="btn primary" id="dl3mf">⬇️ 3MF · twee kleuren (U1)</button>
+            <button class="btn" id="dlstl">⬇️ STL · alles</button>
+            <button class="btn" id="dlstlB">STL · alleen plaat</button>
+            <button class="btn" id="dlstlQ">STL · alleen QR</button>
+          </div>
+          <div class="bar" style="margin-top:10px">
+            <button class="btn primary" id="dlsvg">⬇️ SVG op ware grootte (xTool)</button>
+            <label class="row" style="display:flex;gap:6px;align-items:center;font-size:.92rem"><input type="checkbox" id="svgOutline" checked> rode omtreklijn meenemen</label>
+          </div>
+          <ul class="help">
+            <li><b>Snapmaker U1:</b> open de 3MF in Snapmaker Orca. Er komen twee onderdelen binnen: <i>Plaat</i> en <i>QR</i>. Geef ze elk een eigen filament (bijv. wit en zwart) en slice.</li>
+            <li><b>xTool O1 (UV-print):</b> sleep de SVG in xTool Studio; de maat in mm klopt al. Zet de rode omtrek op "negeren" of haal hem weg als je alleen de QR wilt printen.</li>
+            <li><b>xTool C1 (snijden):</b> de zwarte vormen zijn al samengevoegd, dus je snijdt nette stukjes vinyl. De rode lijn is de buitenrand van het plaatje.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    QR-codes: <a href="https://github.com/nayuki/QR-Code-generator">QR Code generator library</a> van Project Nayuki, MIT (zie <code>LICENSE-qrcodegen.txt</code>), lokaal meegeleverd.
+    3D-weergave: <a href="https://threejs.org">three.js</a>, MIT, via jsDelivr. Alles draait in je eigen browser; er wordt niets geüpload. · <a href="../">Alle demo's</a>
+  </footer>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as Q from './qrmodel.js';
+
+const $ = (id) => document.getElementById(id);
+let mode = 'tekst', preset = 'plaatje', cur = null;
+
+const PRESETS = {
+  plaatje:       { shape: 'vierkant', size: 60, baseT: 2,   modH: 1, radius: 4, loop: false },
+  onderzetter:   { shape: 'rond',     size: 90, baseT: 3,   modH: 1, radius: 8, loop: false },
+  sleutelhanger: { shape: 'vierkant', size: 40, baseT: 2.5, modH: 1, radius: 3, loop: true },
+};
+
+function applyPreset(p) {
+  preset = p; const v = PRESETS[p];
+  for (const k of ['shape', 'size', 'baseT', 'modH', 'radius']) $(k).value = v[k];
+  $('loop').checked = v.loop;
+  if (p === 'sleutelhanger' && $('ecc').value !== 'L') $('ecc').value = 'L';
+  if (p !== 'sleutelhanger' && $('ecc').value === 'L') $('ecc').value = 'M';
+  for (const b of document.querySelectorAll('#presets button')) b.classList.toggle('on', b.dataset.p === p);
+  update();
+}
+
+function payload() {
+  if (mode === 'wifi') return Q.wifiPayload({ ssid: $('ssid').value, password: $('wpass').value, security: $('wsec').value, hidden: $('whid').checked });
+  if (mode === 'vcard') return Q.vcardPayload({ name: $('vname').value, phone: $('vtel').value, email: $('vmail').value, org: $('vorg').value, url: $('vurl').value });
+  return $('txt').value;
+}
+
+function opts() {
+  const num = (id, d) => { const x = parseFloat($(id).value); return isFinite(x) ? x : d; };
+  const size = Math.min(250, Math.max(20, num('size', 60)));
+  const shape = $('shape').value;
+  return {
+    shape, size, baseT: Math.max(0.4, num('baseT', 2)), modH: Math.max(0.2, num('modH', 1)),
+    radius: Math.max(0, Math.min(num('radius', 0), size / 2 - 0.5)),
+    loop: shape === 'vierkant' && $('loop').checked, loopR: Math.max(5, size * 0.15), holeR: 2.5,
+    quiet: parseInt($('quiet').value, 10),
+  };
+}
+
+// ---------- three.js ----------
+const canvas = $('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe6eaf3);
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 5000);
+camera.up.set(0, 0, 1);
+const controls = new OrbitControls(camera, canvas); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8890a0, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.8); sun.position.set(60, -80, 160); scene.add(sun);
+const matBase = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .7, flatShading: true });
+const matQR = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: .6, flatShading: true });
+const group = new THREE.Group(); scene.add(group);
+let lastSize = 0;
+
+function toGeo(m) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(m.pos, 3)); g.setIndex(m.idx);
+  const ng = g.toNonIndexed(); ng.computeVertexNormals(); g.dispose(); return ng;
+}
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio())) {
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+}
+(function loop() { resize(); controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+
+function show3D(model, o) {
+  for (const c of [...group.children]) { c.geometry.dispose(); group.remove(c); }
+  matBase.color.set($('cBase').value); matQR.color.set($('cQR').value);
+  group.add(new THREE.Mesh(toGeo(model.base), matBase), new THREE.Mesh(toGeo(model.mods), matQR));
+  if (o.size !== lastSize) {
+    const d = o.size * 1.9; camera.position.set(0, -d * 0.75, d); controls.target.set(0, o.loop ? o.size * 0.05 : 0, 0); camera.near = d / 100; camera.far = d * 20; camera.updateProjectionMatrix(); lastSize = o.size;
+  }
+}
+
+// ---------- bijwerken ----------
+let timer = 0;
+function update() { clearTimeout(timer); timer = setTimeout(build, 120); }
+
+function build() {
+  const info = $('info'); info.className = 'info';
+  const text = payload(); const o = opts();
+  $('loop').disabled = o.shape !== 'vierkant';
+  if (!text.trim()) { info.textContent = 'Vul eerst iets in.'; info.className = 'info warn'; setDisabled(true); return; }
+  let qr;
+  try { qr = Q.makeQR(text, $('ecc').value); }
+  catch (e) { info.textContent = 'Te veel tekst voor één QR-code. Maak het korter of kies foutcorrectie L.'; info.className = 'info err'; setDisabled(true); return; }
+  const model = Q.buildModel(o, qr);
+  cur = { qr, model, o, text };
+  show3D(model, o);
+  const svg = Q.toSVG(model, qr, { svgOutline: true, qrColor: '#000000', title: 'QR-code' });
+  $('flat').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  const m = model.layout.m;
+  let msg = `Versie ${qr.version} · ${qr.size}×${qr.size} blokjes · foutcorrectie ${qr.ecc} · één blokje = ${m.toFixed(2).replace('.', ',')} mm · ${model.rects.length} samengevoegde blokken in 3D.`;
+  if (m < 1.0) { msg += ' ⚠️ Blokjes kleiner dan 1 mm zijn lastig te printen met een 0,4 mm-nozzle: maak het groter, kies foutcorrectie L of gebruik minder tekst.'; info.className = 'info warn'; }
+  else if (m < 1.4) msg += ' Tip: print met 0,4 mm-nozzle en laaghoogte 0,2 mm of fijner.';
+  info.textContent = msg;
+  setDisabled(false);
+}
+
+function setDisabled(d) { for (const id of ['dl3mf', 'dlstl', 'dlstlB', 'dlstlQ', 'dlsvg']) $(id).disabled = d; }
+
+function fileBase() {
+  const o = cur.o; const kind = { tekst: 'link', wifi: 'wifi', vcard: 'visitekaartje' }[mode];
+  return `qr-${kind}-${preset}-${o.size}mm`;
+}
+function download(data, name, type) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+$('dl3mf').onclick = () => cur && download(Q.to3MF(cur.model.base, cur.model.mods, [$('cBase').value, $('cQR').value], fileBase()), fileBase() + '.3mf', 'model/3mf');
+$('dlstl').onclick = () => cur && download(Q.toSTL([cur.model.base, cur.model.mods], fileBase()), fileBase() + '.stl', 'model/stl');
+$('dlstlB').onclick = () => cur && download(Q.toSTL([cur.model.base], fileBase()), fileBase() + '-plaat.stl', 'model/stl');
+$('dlstlQ').onclick = () => cur && download(Q.toSTL([cur.model.mods], fileBase()), fileBase() + '-qr.stl', 'model/stl');
+$('dlsvg').onclick = () => cur && download(Q.toSVG(cur.model, cur.qr, { svgOutline: $('svgOutline').checked, qrColor: '#000000', title: cur.text.slice(0, 80) }), fileBase() + '.svg', 'image/svg+xml');
+
+for (const b of document.querySelectorAll('#mode button')) b.onclick = () => {
+  mode = b.dataset.m;
+  for (const x of document.querySelectorAll('#mode button')) x.classList.toggle('on', x === b);
+  for (const f of document.querySelectorAll('.fields[data-for]')) f.hidden = f.dataset.for !== mode;
+  update();
+};
+for (const b of document.querySelectorAll('#presets button')) b.onclick = () => applyPreset(b.dataset.p);
+document.querySelectorAll('input, select, textarea').forEach((el) => el.addEventListener('input', update));
+build();
+</script>
+</body>
+</html>
