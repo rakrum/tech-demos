@@ -27,6 +27,7 @@ Liever zelf combineren? Er zijn ook STL-bestanden: **alles** in één, of **alle
 - Klik op **SVG op ware grootte**. De maten staan in millimeters, dus in **xTool Studio** komt hij meteen op de juiste grootte binnen.
 - De QR is zwart op een doorzichtige achtergrond. Aangrenzende blokjes zijn samengevoegd tot nette vormen; handig voor UV-print en om vinyl te snijden.
 - De **rode omtreklijn** is de buitenrand van het plaatje (met gaatje bij de sleutelhanger). Gebruik hem als snijlijn op de C1, of zet het vinkje uit als je alleen de QR wilt.
+- Liever een **PNG**? Klik op **Download PNG**: scherpe pixels, standaard 300 dpi op ware grootte (ook 600 dpi of "groot" ≥1024 px), met witte of transparante achtergrond. Handig voor xTool Studio, om te delen of om op papier te printen.
 - UV-print op een donkere ondergrond? Zet in xTool Studio een **witte onderlaag** aan, anders leest je telefoon de code slecht.
 
 ## Credits en licenties

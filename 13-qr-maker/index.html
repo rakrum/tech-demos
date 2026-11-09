@@ -144,9 +144,16 @@
             <button class="btn primary" id="dlsvg">⬇️ SVG op ware grootte (xTool)</button>
             <label class="row" style="display:flex;gap:6px;align-items:center;font-size:.92rem"><input type="checkbox" id="svgOutline" checked> rode omtreklijn meenemen</label>
           </div>
+          <div class="bar" style="margin-top:10px">
+            <button class="btn primary" id="dlpng">⬇️ Download PNG</button>
+            <select id="pngRes" style="width:auto"><option value="300" selected>300 dpi · ware grootte</option><option value="600">600 dpi · ware grootte</option><option value="groot">Groot (≥1024 px)</option></select>
+            <select id="pngBg" style="width:auto"><option value="wit" selected>Witte achtergrond</option><option value="transparant">Transparant</option></select>
+          </div>
+          <div class="hint" id="pngInfo" style="margin-top:6px"></div>
           <ul class="help">
             <li><b>Snapmaker U1:</b> open de 3MF in Snapmaker Orca. Er komen twee onderdelen binnen: <i>Plaat</i> en <i>QR</i>. Geef ze elk een eigen filament (bijv. wit en zwart) en slice.</li>
             <li><b>xTool O1 (UV-print):</b> sleep de SVG in xTool Studio; de maat in mm klopt al. Zet de rode omtrek op "negeren" of haal hem weg als je alleen de QR wilt printen.</li>
+            <li><b>PNG:</b> scherpe pixels, bij 300/600 dpi op ware grootte (maat × maat mm). Handig voor xTool Studio, om te delen of om op papier te printen.</li>
             <li><b>xTool C1 (snijden):</b> de zwarte vormen zijn al samengevoegd, dus je snijdt nette stukjes vinyl. De rode lijn is de buitenrand van het plaatje.</li>
           </ul>
         </div>
@@ -263,10 +270,11 @@ function build() {
   if (m < 1.0) { msg += ' ⚠️ Blokjes kleiner dan 1 mm zijn lastig te printen met een 0,4 mm-nozzle: maak het groter, kies foutcorrectie L of gebruik minder tekst.'; info.className = 'info warn'; }
   else if (m < 1.4) msg += ' Tip: print met 0,4 mm-nozzle en laaghoogte 0,2 mm of fijner.';
   info.textContent = msg;
+  pngInfo();
   setDisabled(false);
 }
 
-function setDisabled(d) { for (const id of ['dl3mf', 'dlstl', 'dlstlB', 'dlstlQ', 'dlsvg']) $(id).disabled = d; }
+function setDisabled(d) { for (const id of ['dl3mf', 'dlstl', 'dlstlB', 'dlstlQ', 'dlsvg', 'dlpng']) $(id).disabled = d; }
 
 function fileBase() {
   const o = cur.o; const kind = { tekst: 'link', wifi: 'wifi', vcard: 'visitekaartje' }[mode];
@@ -282,6 +290,27 @@ $('dl3mf').onclick = () => cur && download(Q.to3MF(cur.model.base, cur.model.mod
 $('dlstl').onclick = () => cur && download(Q.toSTL([cur.model.base, cur.model.mods], fileBase()), fileBase() + '.stl', 'model/stl');
 $('dlstlB').onclick = () => cur && download(Q.toSTL([cur.model.base], fileBase()), fileBase() + '-plaat.stl', 'model/stl');
 $('dlstlQ').onclick = () => cur && download(Q.toSTL([cur.model.mods], fileBase()), fileBase() + '-qr.stl', 'model/stl');
+function pngInfo() {
+  if (!cur) return; const P = Q.pngPlan(cur.model, cur.qr, cur.o, $('pngRes').value);
+  $('pngInfo').textContent = P.dpi ? `PNG: ${P.W} × ${P.H} px = ${cur.o.size} × ${cur.o.size} mm bij ${P.dpi} dpi · ${P.ppm} px per blokje.` : `PNG: ${P.W} × ${P.H} px (alleen QR + witte rand) · ${P.ppm} px per blokje.`;
+}
+function makePNG() {
+  const P = Q.pngPlan(cur.model, cur.qr, cur.o, $('pngRes').value);
+  const c = document.createElement('canvas'); c.width = P.W; c.height = P.H;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  if ($('pngBg').value === 'wit') { g.fillStyle = '#ffffff'; g.fillRect(0, 0, P.W, P.H); }
+  g.fillStyle = $('cQR').value;
+  for (const R of cur.model.rects) g.fillRect(P.ox + R.c * P.ppm, P.oy + R.r * P.ppm, R.w * P.ppm, R.h * P.ppm);
+  return new Promise((ok) => c.toBlob(async (b) => {
+    let bytes = new Uint8Array(await b.arrayBuffer()); if (P.dpi) bytes = Q.pngSetDpi(bytes, P.dpi);
+    ok({ bytes, P });
+  }, 'image/png'));
+}
+$('dlpng').onclick = async () => {
+  if (!cur) return; const { bytes, P } = await makePNG();
+  download(bytes, fileBase() + (P.dpi ? `-${P.dpi}dpi` : '-groot') + '.png', 'image/png');
+};
+$('pngRes').addEventListener('change', pngInfo);
 $('dlsvg').onclick = () => cur && download(Q.toSVG(cur.model, cur.qr, { svgOutline: $('svgOutline').checked, qrColor: '#000000', title: cur.text.slice(0, 80) }), fileBase() + '.svg', 'image/svg+xml');
 
 for (const b of document.querySelectorAll('#mode button')) b.onclick = () => {

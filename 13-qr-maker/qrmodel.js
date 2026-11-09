@@ -233,6 +233,39 @@ export function toSVG(model, qr, o) {
   return s + '</svg>\n';
 }
 
+// ---------- PNG ----------
+// Plan voor een scherpe PNG: hele pixels per module. Bij 'dpi' is het beeld een vierkant van maat × maat mm
+// (zelfde middelpunt als de plaat), zodat het op ware grootte print; bij 'groot' alleen QR + stille zone, ≥1024 px.
+export function pngPlan(model, qr, o, res) {
+  const L = model.layout; const n = qr.size, q = o.quiet;
+  if (res === 'groot') {
+    const ppm = Math.max(1, Math.ceil(1024 / (n + 2 * q))); const W = ppm * (n + 2 * q);
+    return { W, H: W, ppm, ox: q * ppm, oy: q * ppm, dpi: 0 };
+  }
+  const dpi = Number(res) || 300; const pxmm = dpi / 25.4;
+  const W = Math.round(o.size * pxmm);
+  let ppm = Math.max(1, Math.round(L.m * pxmm)); while (ppm * n > W && ppm > 1) ppm--;
+  // linkerbovenhoek van module (0,0) in mm vanaf de linkerbovenhoek van het vierkant (plaatmidden = beeldmidden)
+  const cx = (L.x0 + n * L.m / 2), cy = (L.yTop - n * L.m / 2);
+  const ox = Math.round(W / 2 + cx * pxmm - n * ppm / 2), oy = Math.round(W / 2 - cy * pxmm - n * ppm / 2);
+  return { W, H: W, ppm, ox, oy, dpi };
+}
+
+// Zet (of vervang) een pHYs-chunk in een PNG zodat de dpi meegaat.
+export function pngSetDpi(bytes, dpi) {
+  const u8 = new Uint8Array(bytes); const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const chunks = []; let off = 8;
+  while (off < u8.length) { const len = dv.getUint32(off); const type = String.fromCharCode(...u8.subarray(off + 4, off + 8)); chunks.push({ type, data: u8.subarray(off, off + 12 + len) }); off += 12 + len; }
+  const ppmtr = Math.round(dpi / 0.0254);
+  const ph = new Uint8Array(21); const pv = new DataView(ph.buffer);
+  pv.setUint32(0, 9); ph.set([0x70, 0x48, 0x59, 0x73], 4); pv.setUint32(8, ppmtr); pv.setUint32(12, ppmtr); ph[16] = 1;
+  pv.setUint32(17, crc32(ph.subarray(4, 17)));
+  const parts = [u8.subarray(0, 8)];
+  for (const c of chunks) { if (c.type === 'pHYs') continue; parts.push(c.data); if (c.type === 'IHDR') parts.push(ph); }
+  const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0)); let p = 0; for (const x of parts) { out.set(x, p); p += x.length; }
+  return out;
+}
+
 // Minimale zip-schrijver (zonder compressie)
 const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
