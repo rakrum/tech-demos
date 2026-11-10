@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>OpenSCAD customizer · aanpasbare 3D-modellen in je browser</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; --warn:#b5651d; --err:#c0392b; }
+    * { box-sizing:border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1200px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; justify-content:space-between; }
+    .sub { color:var(--muted); margin:0 0 16px; }
+    .layout { display:grid; grid-template-columns:minmax(320px,420px) 1fr; gap:16px; align-items:start; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .pad { padding:12px 14px; }
+    .hint { color:var(--muted); font-size:.82rem; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn.small { padding:5px 9px; font-size:.85rem; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .examples { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .examples .btn { justify-content:flex-start; text-align:left; }
+    .examples .btn.on { border-color:var(--accent); box-shadow:0 0 0 2px rgba(79,107,255,.2); }
+    #drop { margin-top:10px; border:2px dashed var(--line); border-radius:12px; padding:14px; text-align:center; color:var(--muted); font-size:.9rem; cursor:pointer; }
+    #drop.over { border-color:var(--accent); background:#eef1ff; color:var(--ink); }
+    #params details { border-bottom:1px solid var(--line); }
+    #params details:last-child { border-bottom:0; }
+    #params summary { padding:10px 14px; font-weight:600; cursor:pointer; font-size:.95rem; }
+    .plist { display:grid; gap:12px; padding:0 14px 14px; font-size:.9rem; }
+    .param label.cap { display:block; margin-bottom:4px; }
+    .param .nm { color:var(--muted); font-size:.75rem; font-family:ui-monospace,Menlo,monospace; }
+    .param.changed label.cap::after { content:" •"; color:var(--accent); font-weight:700; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row input[type=range] { flex:1; }
+    .row input[type=number] { width:90px; flex:none; }
+    input[type=text], input[type=number], select, textarea { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); width:100%; }
+    .vec { display:flex; gap:6px; } .vec input { width:auto; flex:1; min-width:0; }
+    textarea#code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; min-height:260px; border:0; border-radius:0; resize:vertical; white-space:pre; tab-size:2; }
+    #view { width:100%; height:min(60vh,520px); display:block; background:linear-gradient(#eef1f8,#dfe4ef); }
+    #svgview { display:none; height:min(60vh,520px); align-items:center; justify-content:center; background:#fff; }
+    #svgview img { max-width:90%; max-height:90%; }
+    .info { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:.9rem; color:var(--muted); padding:10px 14px; border-top:1px solid var(--line); }
+    .info b { color:var(--ink); }
+    #status { font-size:.92rem; padding:10px 14px; border-top:1px solid var(--line); min-height:1.2em; }
+    #status.busy::before { content:""; display:inline-block; width:10px; height:10px; margin-right:8px; border-radius:50%; border:2px solid var(--accent); border-right-color:transparent; animation:spin .8s linear infinite; vertical-align:-1px; }
+    #status.err { color:var(--err); } #status.warn { color:var(--warn); } #status.ok { color:#1e7d43; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    pre#log { margin:0; padding:10px 14px; max-height:220px; overflow:auto; font-size:.75rem; background:#fbfbfd; border-top:1px solid var(--line); white-space:pre-wrap; }
+    pre#log .e { color:var(--err); } pre#log .w { color:var(--warn); } pre#log .m { color:#2c4bd6; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; margin:6px 0; }
+    footer { margin-top:20px; font-size:.8rem; color:var(--muted); }
+    a { color:var(--accent); }
+    label.chk { display:flex; align-items:center; gap:6px; font-size:.9rem; }
+    @media (max-width:900px) { .layout { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>OpenSCAD customizer</h1>
+  <p class="sub">Open een aanpasbaar OpenSCAD-model (.scad), schuif aan de maten en teksten, en download een printklare STL of 3MF voor de Snapmaker U1. Alles draait in je eigen browser.</p>
+
+  <div class="layout">
+    <div>
+      <section class="card">
+        <h2>1 · Kies een model</h2>
+        <div class="pad">
+          <div class="examples" id="examples"></div>
+          <div id="drop" tabindex="0">Sleep hier een <b>.scad</b>-bestand naartoe<br>of <u>klik om er een te kiezen</u><br><span class="hint">Meerdere bestanden mag ook (bv. een model met eigen include-bestanden)</span></div>
+          <input type="file" id="file" accept=".scad,.txt,.dat,.svg,.dxf,.stl" multiple hidden>
+          <p class="hint" id="modelinfo" style="margin:10px 0 0"></p>
+        </div>
+      </section>
+
+      <section class="card" id="paramcard">
+        <h2>2 · Pas aan <span class="bar"><button class="btn small" id="reset" title="Alle parameters terug naar de standaardwaarde">Standaard</button></span></h2>
+        <div id="params"><p class="pad hint">Nog geen parameters.</p></div>
+      </section>
+
+      <section class="card">
+        <h2>Code <span class="hint">(bekijken of aanpassen)</span></h2>
+        <textarea id="code" spellcheck="false" aria-label="OpenSCAD-code"></textarea>
+        <div class="pad bar" style="border-top:1px solid var(--line)">
+          <button class="btn small" id="reparse">Parameters opnieuw lezen</button>
+          <span class="hint">Na het typen worden de parameters vanzelf opnieuw gelezen.</span>
+        </div>
+      </section>
+    </div>
+
+    <div>
+      <section class="card">
+        <h2>3 · Voorbeeld in 3D
+          <span class="bar">
+            <label class="chk"><input type="checkbox" id="auto" checked> Automatisch renderen</label>
+            <button class="btn primary" id="render">Renderen</button>
+            <button class="btn" id="stop" hidden>Stop</button>
+          </span>
+        </h2>
+        <canvas id="view"></canvas>
+        <div id="svgview"><img alt="2D-voorbeeld"></div>
+        <div class="info" id="dims"><span>Nog niets gerenderd.</span></div>
+        <div id="status">OpenSCAD wordt klaargezet…</div>
+        <div class="pad bar" style="border-top:1px solid var(--line)">
+          <button class="btn primary" id="dl3mf" disabled>Download 3MF (U1)</button>
+          <button class="btn" id="dlstl" disabled>Download STL</button>
+          <button class="btn" id="dlsvg" disabled hidden>Download SVG (2D)</button>
+          <button class="btn" id="dlscad">Download .scad met jouw waarden</button>
+        </div>
+        <details>
+          <summary class="pad hint" style="cursor:pointer">Logboek van OpenSCAD</summary>
+          <pre id="log"></pre>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Tips</h2>
+        <div class="pad">
+          <ul class="help">
+            <li>Aanpasbare modellen vind je op <a href="https://www.printables.com/search/models?q=customizable%20openscad" target="_blank" rel="noopener">Printables</a> en <a href="https://www.thingiverse.com/search?q=customizer&type=things" target="_blank" rel="noopener">Thingiverse</a> (zoek op <i>Customizable</i> of <i>Customizer</i>). Download het <b>.scad</b>-bestand en sleep het hierheen.</li>
+            <li>De bibliotheken <b>MCAD</b> en <b>BOSL2</b> zitten erin; andere bibliotheken (bv. NopSCADlib) niet.</li>
+            <li>Ingewikkelde modellen kunnen even duren. Zet <i>Automatisch renderen</i> dan uit en klik zelf op <b>Renderen</b>.</li>
+            <li>Een model van een ander heeft zijn eigen licentie: kijk op de modelpagina of je prints mag verkopen.</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    Tech demo 14 · Draait op <a href="https://openscad.org" target="_blank" rel="noopener">OpenSCAD</a> (GPL-2, WebAssembly-build uit <a href="https://github.com/openscad/openscad-playground" target="_blank" rel="noopener">OpenSCAD Playground</a>, met Manifold), lettertypes Liberation (OFL), bibliotheken MCAD (LGPL-2.1) en BOSL2 (BSD-2), 3D-weergave three.js (MIT). Voorbeeldmodellen: CC0/MIT. Er wordt niets geüpload.
+  </footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
