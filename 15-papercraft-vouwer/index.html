@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Papercraft-vouwer: 3D-model naar bouwplaat voor de xTool C1 · Tech demo 15</title>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+} }
+</script>
+<style>
+  :root { --bg:#f5f6fb; --card:#fff; --fg:#1d2333; --muted:#5d6584; --acc:#4f6bff; --warn:#b45309; --err:#b91c1c; --ok:#15803d; --line:#e3e6f2; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:16px 20px 4px; }
+  header h1 { margin:0; font-size:22px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:14px; line-height:1.45; }
+  main { display:grid; grid-template-columns:minmax(300px,380px) 1fr; gap:16px; padding:12px 20px 24px; align-items:start; }
+  @media (max-width:860px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border-radius:14px; padding:14px 16px; box-shadow:0 2px 10px rgba(20,30,80,.07); margin-bottom:16px; }
+  .lbl { font-size:12px; color:var(--muted); margin:14px 0 4px; text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+  .lbl:first-child { margin-top:0; }
+  .grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+  label.f { display:flex; flex-direction:column; font-size:13px; gap:3px; }
+  input[type=number], select { font:inherit; font-size:15px; padding:8px 10px; border:1px solid #cfd4e6; border-radius:10px; background:#fff; width:100%; min-height:40px; }
+  input[type=color] { width:100%; min-height:40px; border:1px solid #cfd4e6; border-radius:10px; background:#fff; padding:3px; }
+  label.c { display:flex; gap:8px; align-items:center; font-size:14px; margin:6px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  button { font:inherit; font-size:15px; border:0; border-radius:10px; padding:10px 14px; background:#e6e9f7; color:var(--fg); cursor:pointer; min-height:42px; }
+  button.primary { background:var(--acc); color:#fff; font-weight:600; }
+  button.small { font-size:13px; padding:6px 10px; min-height:32px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .examples { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .examples button { text-align:left; font-size:14px; }
+  .examples button.on { background:var(--acc); color:#fff; }
+  #drop { margin-top:10px; border:2px dashed #cfd4e6; border-radius:12px; padding:14px; text-align:center; color:var(--muted); font-size:14px; cursor:pointer; line-height:1.4; }
+  #drop.over { border-color:var(--acc); background:#eef1ff; color:var(--fg); }
+  .hint { font-size:12.5px; color:var(--muted); line-height:1.45; margin:4px 0 0; }
+  .msg { padding:8px 10px; border-radius:10px; margin-top:8px; font-size:14px; line-height:1.4; }
+  .msg.ok { background:#e8f7ee; color:var(--ok); } .msg.warn { background:#fff4e5; color:var(--warn); } .msg.err { background:#fdecec; color:var(--err); }
+  #info { font-size:14px; line-height:1.55; margin-top:10px; }
+  #view3d { width:100%; height:min(46vh,420px); min-height:280px; background:#eef0f8; border:1px solid var(--line); border-radius:12px; position:relative; overflow:hidden; }
+  #view3d canvas { display:block; width:100%; height:100%; touch-action:none; }
+  #view3d .ov { position:absolute; left:10px; bottom:8px; font-size:12px; color:var(--muted); pointer-events:none; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  .legend span::before { content:""; display:inline-block; width:24px; height:0; border-top:2.5px solid currentColor; vertical-align:middle; margin-right:6px; }
+  .l-cut { color:#ff0000; } .l-berg { color:#0000ff; } .l-dal { color:#0000ff; } .l-txt { color:#000; } .l-mar { color:#9aa3c7; }
+  .l-berg::before { border-top-style:dashed !important; } .l-dal::before { border-top-style:dotted !important; } .l-mar::before { border-top-style:dotted !important; }
+  #sheets { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  .sheet { background:#fbfbfe; border:1px solid var(--line); border-radius:12px; padding:8px; }
+  .sheet svg { width:100%; height:auto; display:block; }
+  .sheet .cap { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:13px; color:var(--muted); margin-top:6px; flex-wrap:wrap; }
+  ol { padding-left:20px; margin:6px 0; } li { margin:4px 0; font-size:14px; line-height:1.45; }
+  footer { padding:0 20px 28px; font-size:12.5px; color:var(--muted); line-height:1.5; }
+  a { color:var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Papercraft-vouwer: van 3D-model naar bouwplaat</h1>
+  <p>Sleep een low-poly 3D-model erin (STL, OBJ of GLB) en krijg een uitslag van papier of karton op ware grootte voor de <b>xTool C1</b>: <b style="color:#d00">rood = snijden</b>, <b style="color:#00c">blauw = rillen (vouwen)</b>, met lijmlipjes en nummers op de naden. Geïnspireerd door <a href="https://github.com/rodrigorc/papercraft" target="_blank" rel="noopener">Papercraft</a>.</p>
+</header>
+<main>
+  <section>
+    <div class="card" id="form">
+      <div class="lbl">1 · Model</div>
+      <div class="examples" id="examples"></div>
+      <div id="drop" tabindex="0" role="button">Sleep hier een <b>.stl</b>, <b>.obj</b>, <b>.glb</b> of <b>.gltf</b> neer<br>of klik om een bestand te kiezen</div>
+      <input type="file" id="file" accept=".stl,.obj,.glb,.gltf,.bin,.png,.jpg,.jpeg" multiple hidden>
+
+      <div class="lbl">2 · Grootte en vel</div>
+      <div class="grid2">
+        <label class="f">Grootste maat (mm)<input type="number" id="size" value="120" min="10" max="2000" step="1"></label>
+        <label class="f">Vel<select id="sheet">
+          <option value="a4">A4 (210 × 297 mm)</option>
+          <option value="a3">A3 (297 × 420 mm)</option>
+          <option value="c1">C1-mat (305 × 305 mm)</option>
+          <option value="c1lang">C1 lange mat (305 × 610 mm)</option>
+        </select></label>
+        <label class="f">Marge (mm)<input type="number" id="margin" value="10" min="0" max="50" step="1"></label>
+        <label class="f">Lijmlipje (mm, 0 = geen)<input type="number" id="tab" value="6" min="0" max="20" step="0.5"></label>
+      </div>
+      <div id="dims" class="hint"></div>
+
+      <div class="lbl">3 · Vlakken</div>
+      <label class="f">Platte vlakken samenvoegen tot (graden verschil)<input type="number" id="tol" value="1" min="0" max="20" step="0.5"></label>
+      <p class="hint">Driehoeken die (bijna) in één vlak liggen worden één vlak, zodat een kubus 6 vierkanten wordt. Een hogere waarde maakt minder, iets minder vlakke vlakken.</p>
+
+      <div class="lbl">4 · Lagen</div>
+      <label class="c"><input type="checkbox" id="numbers" checked> Naadnummers (zwarte laag <i>tekst</i>, voor de pen)</label>
+      <label class="c"><input type="checkbox" id="colorOn"> Kleurlaag (eerst printen, dan snijden)</label>
+      <div class="grid2" id="colorOpts" hidden>
+        <label class="f">Kleur<select id="colorSrc"><option value="model">Uit het model</option><option value="eigen">Eén eigen kleur</option></select></label>
+        <label class="f">Eigen kleur<input type="color" id="fill" value="#f4c430"></label>
+      </div>
+
+      <div class="row">
+        <button id="herschik" title="Probeer een andere indeling">🔀 Herschik</button>
+        <button class="primary" id="dlsvg">SVG downloaden</button>
+        <button id="dldxf">DXF downloaden</button>
+      </div>
+      <div id="status"></div>
+      <div id="info"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">Zo snijd je hem op de xTool C1</div>
+      <ol>
+        <li>Open de SVG in <b>xTool Studio</b>. Hij staat al op ware grootte in mm.</li>
+        <li><b>Rood</b> (laag <i>cut</i>) = <b>Snijden</b> met het mesje. <b>Blauw</b> (laag <i>score</i>) = <b>Rillen</b> (of Pen als je geen rilpunt hebt). <b>Zwart</b> (laag <i>tekst</i>) = <b>Pen</b>, of verwijder die laag.</li>
+        <li>Kleurlaag aan? Print het vel eerst, en snijd daarna met <i>Print then Cut</i>. De kleur loopt 0,5 mm door over de rand.</li>
+        <li>Karton van <b>160–250 g/m²</b> werkt het best. Vouw de bergvouwen van je af en de dalvouwen naar je toe (gezien vanaf de bedrukte kant).</li>
+        <li>Plak elk lipje onder de rand met <b>hetzelfde nummer</b>. Het streepje staat onder het getal, zodat je 6 en 9 uit elkaar houdt.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <div id="view3d"><div class="ov">Slepen = draaien · scrollen = zoomen · rood = snijnaad, blauw = vouw</div></div>
+    </div>
+    <div class="card">
+      <div class="legend"><span class="l-cut">snijden</span><span class="l-berg">bergvouw</span><span class="l-dal">dalvouw</span><span class="l-txt">nummer (pen)</span><span class="l-mar">marge van het vel</span></div>
+      <div id="sheets"></div>
+    </div>
+  </section>
+</main>
+<footer>
+  Eigen implementatie, geïnspireerd door <a href="https://github.com/rodrigorc/papercraft" target="_blank" rel="noopener">Papercraft</a> van Rodrigo Rivas Costa (GPL-3.0). 3D-weergave en inladen van modellen: <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT). Alles draait in je browser; er wordt niets geüpload. · <a href="../">Alle tech demo's</a>
+</footer>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
