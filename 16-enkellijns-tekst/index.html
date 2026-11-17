@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Enkellijns-tekstmaker · Tech demo 16</title>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; --warn:#b5651d; --err:#c0392b; }
+    * { box-sizing:border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1100px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; line-height:1.45; }
+    .layout { display:grid; grid-template-columns:minmax(280px,380px) 1fr; gap:16px; align-items:start; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .pad { padding:12px 14px; }
+    .fields { display:grid; gap:10px; font-size:.92rem; }
+    .fields label, .grid label { display:flex; flex-direction:column; gap:4px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; font-size:.92rem; }
+    input[type=number], select, textarea {
+      font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); width:100%; }
+    textarea { min-height:96px; resize:vertical; line-height:1.4; }
+    .hint { color:var(--muted); font-size:.82rem; }
+    .seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; flex-wrap:wrap; }
+    .seg button { border:0; background:#fff; padding:7px 12px; font-size:.92rem; cursor:pointer; color:var(--ink); border-right:1px solid var(--line); }
+    .seg button:last-child { border-right:0; }
+    .seg button.on { background:var(--accent); color:#fff; }
+    label.row { flex-direction:row !important; align-items:center; gap:8px; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    #stage {
+      min-height:220px; padding:18px 16px 12px; display:flex; align-items:center; justify-content:center;
+      background:
+        linear-gradient(#fff, #fff) padding-box,
+        linear-gradient(45deg,#eceff6 25%,transparent 25%),
+        linear-gradient(-45deg,#eceff6 25%,transparent 25%),
+        linear-gradient(45deg,transparent 75%,#eceff6 75%),
+        linear-gradient(-45deg,transparent 75%,#eceff6 75%);
+      background-size:auto, 16px 16px, 16px 16px, 16px 16px, 16px 16px;
+      background-position:0 0, 0 0, 0 8px, 8px -8px, -8px 0;
+    }
+    #stage .preview-svg { width:100%; height:auto; max-height:min(52vh,420px); background:#fff; border-radius:6px; box-shadow:0 1px 6px rgba(20,30,60,.08); }
+    #stage .empty { color:var(--muted); margin:0; font-size:.95rem; }
+    .info { font-size:.9rem; color:var(--muted); padding:10px 14px; border-top:1px solid var(--line); min-height:1.2em; }
+    .warn { color:var(--warn); font-size:.88rem; padding:0 14px 10px; }
+    .msg { padding:10px 14px; border-radius:10px; margin:8px 0; font-size:.95rem; }
+    .msg.err { background:#fdecec; color:var(--err); }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; margin:6px 0 0; line-height:1.45; }
+    footer { margin-top:8px; font-size:.8rem; color:var(--muted); line-height:1.5; }
+    a { color:var(--accent); }
+    @media (max-width:860px) { .layout { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Enkellijns-tekstmaker</h1>
+  <p class="sub">Typ een naam of een kersttekst en krijg letters van <b>één enkele lijn</b>, als SVG op ware grootte. Geschikt voor de foliepen of tekenpen van de <b>xTool C1</b>, of om te lijngraveren op de <b>O1</b>. Gewone letters hebben een omtrek (dus dubbele randen); bij deze letters volgt de pen één enkele lijn.</p>
+
+  <div id="status" class="msg">Lettertypen worden geladen…</div>
+
+  <div id="app" hidden>
+    <div class="layout">
+      <div>
+        <div class="card">
+          <h2>1. Tekst en lettertype</h2>
+          <div class="pad">
+            <div class="fields">
+              <label>Tekst
+                <textarea id="text" spellcheck="true">Fijne feestdagen</textarea>
+              </label>
+              <label>Lettertype
+                <select id="font"></select>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>2. Grootte en uitlijning</h2>
+          <div class="pad">
+            <div class="grid">
+              <label>Letterhoogte (mm)
+                <input type="number" id="height" min="2" max="200" step="0.5" value="12">
+              </label>
+              <label>Letterspatiëring (mm)
+                <input type="number" id="tracking" min="-5" max="20" step="0.1" value="0">
+              </label>
+              <label>Regelafstand (× hoogte)
+                <input type="number" id="leading" min="0.8" max="3" step="0.1" value="1.6">
+              </label>
+              <div>
+                <span class="hint" style="display:block;margin-bottom:4px">Uitlijning</span>
+                <div class="seg" id="align">
+                  <button type="button" data-a="left">Links</button>
+                  <button type="button" data-a="center" class="on">Midden</button>
+                  <button type="button" data-a="right">Rechts</button>
+                </div>
+              </div>
+            </div>
+            <p class="hint" id="leadingHint" style="margin:10px 0 8px"></p>
+            <label class="row" style="display:flex;gap:8px;align-items:center;font-size:.92rem">
+              <input type="checkbox" id="box"> Dun kader meenemen (rode lijn)
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>3. Voorbeeld</h2>
+          <div id="stage"></div>
+          <div class="info" id="info">Afmeting: —</div>
+          <p class="warn" id="warn" hidden></p>
+        </div>
+        <div class="card">
+          <h2>4. Downloaden</h2>
+          <div class="pad">
+            <button class="btn primary" id="dlsvg">⬇️ SVG op ware grootte (xTool)</button>
+            <p class="hint" style="margin:10px 0 0">De maten staan in millimeters. Lijnen zijn zwart, 0,2 mm dik, zonder vulling.</p>
+            <ul class="help">
+              <li>Open de SVG in <b>xTool Creative Space</b>.</li>
+              <li>Controleer of de grootte in millimeters klopt met wat hierboven staat.</li>
+              <li>Zet de lijnen op de <b>foliepen</b> of <b>tekenpen</b> (C1), of op <b>lijngraveren</b> (O1) — niet op “vullen” of een snijlijn door het midden van dikke letters.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Letterdata: oorspronkelijke <a href="https://en.wikipedia.org/wiki/Hershey_fonts">Hershey-graveerletters</a> (publiek domein), via <a href="https://github.com/techninja/hersheytextjs">hersheytextjs</a> (MIT, zie <code>LICENSE-hersheytextjs.txt</code>). Alles draait in je eigen browser; er wordt niets geüpload.
+  </footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
