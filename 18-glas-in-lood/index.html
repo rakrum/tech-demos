@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Glas in lood · Tech demo 18</title>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; --err:#c0392b; }
+    * { box-sizing:border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1100px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; line-height:1.45; }
+    .layout { display:grid; grid-template-columns:minmax(280px,380px) 1fr; gap:16px; align-items:start; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .pad { padding:12px 14px; }
+    .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .fields { display:grid; gap:12px; font-size:.92rem; }
+    .fields label { display:flex; flex-direction:column; gap:4px; }
+    .fields label.off { opacity:.5; }
+    input[type=range] { width:100%; accent-color:var(--accent); }
+    input[type=checkbox] { accent-color:var(--accent); }
+    label.row { flex-direction:row !important; align-items:center; gap:8px; }
+    .hint { color:var(--muted); font-size:.82rem; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    input[type=file] { display:none; }
+    .drop { margin:10px 0 0; border:2px dashed var(--line); border-radius:12px; padding:14px; text-align:center; color:var(--muted); font-size:.9rem; }
+    .drop.drag { border-color:var(--accent); background:rgba(79,107,255,.06); color:var(--accent); }
+    .status { font-size:.9rem; color:var(--muted); margin:8px 0 0; min-height:1.2em; }
+    .status.err { color:var(--err); }
+    .thumb { margin-top:10px; }
+    .thumb img { display:block; width:100%; height:auto; max-height:180px; object-fit:contain; background:#eef0f6; border-radius:8px; }
+    .thumb .empty { color:var(--muted); font-size:.88rem; margin:0; }
+    .meta { color:var(--muted); font-size:.82rem; margin:6px 0 0; }
+    #stage {
+      min-height:280px; padding:14px; display:flex; align-items:center; justify-content:center;
+      background:
+        linear-gradient(#fff, #fff) padding-box,
+        linear-gradient(45deg,#eceff6 25%,transparent 25%),
+        linear-gradient(-45deg,#eceff6 25%,transparent 25%),
+        linear-gradient(45deg,transparent 75%,#eceff6 75%),
+        linear-gradient(-45deg,transparent 75%,#eceff6 75%);
+      background-size:auto, 16px 16px, 16px 16px, 16px 16px, 16px 16px;
+      background-position:0 0, 0 0, 0 8px, 8px -8px, -8px 0;
+    }
+    #preview { display:block; max-width:100%; height:auto; background:#fff; border-radius:6px; box-shadow:0 1px 6px rgba(20,30,60,.08); }
+    #previewEmpty { color:var(--muted); margin:0; font-size:.95rem; text-align:center; padding:12px; }
+    .info { font-size:.9rem; color:var(--muted); padding:10px 14px; border-top:1px solid var(--line); min-height:1.2em; line-height:1.45; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; margin:6px 0 0; line-height:1.45; }
+    footer { margin-top:8px; font-size:.8rem; color:var(--muted); line-height:1.5; }
+    a { color:var(--accent); }
+    @media (max-width:860px) { .layout { grid-template-columns:1fr; } }
+      select { border:1px solid var(--line); border-radius:6px; padding:3px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Glas in lood</h1>
+  <p class="sub">Maak van een foto een <b>glas-in-lood-raam</b>: de foto wordt in vlakjes verdeeld, elk vlakje krijgt de kleur van de foto op die plek en ertussen komen zwarte loodlijnen. Je krijgt een kleurbestand om te <b>UV-printen op de xTool O1 Omni</b> en een apart bestand met alleen de loodlijnen om te <b>graveren of snijden</b> op de C1 of O1. Alles gebeurt in je eigen browser; je foto wordt nergens geüpload.</p>
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>1. Kies een foto</h2>
+        <div class="pad">
+          <div class="bar">
+            <button class="btn primary" id="pick" type="button">📷 Kies een foto</button>
+            <button class="btn" id="sample" type="button">🖼️ Probeer het voorbeeld</button>
+            <input type="file" id="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
+          </div>
+          <div class="drop" id="drop">…of sleep een JPG of PNG hierheen. Je foto blijft op je eigen computer.</div>
+          <p class="status" id="status">Klaar om te beginnen.</p>
+          <p class="meta" id="photoMeta"></p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>2. Vlakjes</h2>
+        <div class="pad"><div class="fields">
+          <label>Aantal vlakjes
+            <input type="range" id="cells" min="50" max="3000" step="10" value="600">
+            <span class="hint"><span id="cellsVal">600</span> — minder vlakjes = grover, steviger glas-in-lood-look; gezichten hebben meer vlakjes nodig</span>
+          </label>
+          <label>Meer vlakjes bij details
+            <input type="range" id="detail" min="0" max="100" step="5" value="60">
+            <span class="hint"><span id="detailVal">60</span> % — hoger = kleinere vlakjes bij ogen, randen en contrast</span>
+          </label>
+          <label>Gelijkmatigheid
+            <input type="range" id="lloyd" min="0" max="6" step="1" value="2">
+            <span class="hint"><span id="lloydVal">2</span> — hoger = vlakjes van meer gelijke vorm</span>
+          </label>
+          <div class="bar"><button class="btn" id="reshuffle" type="button">🎲 Andere verdeling</button></div>
+        </div></div>
+      </div>
+      <div class="card">
+        <h2>3. Kleur en lood</h2>
+        <div class="pad"><div class="fields">
+          <label>Kleurkracht
+            <input type="range" id="boost" min="60" max="220" step="5" value="115">
+            <span class="hint"><span id="boostVal">115</span> % — hoger = levendiger glas</span>
+          </label>
+          <label>Aantal kleuren
+            <input type="range" id="palette" min="0" max="24" step="1" value="0">
+            <span class="hint" id="paletteVal">alle kleuren (geen beperking)</span>
+          </label>
+          <label>Dikte van het lood (kleurbestand)
+            <input type="range" id="lead" min="0.3" max="4" step="0.1" value="1.2">
+            <span class="hint" id="leadVal">1,2 mm</span>
+          </label>
+          <label class="row"><input type="checkbox" id="frame" checked> Buitenrand (kader) om het raam</label>
+          <label id="frameLabel">Dikte van de buitenrand
+            <input type="range" id="framemm" min="0.5" max="8" step="0.1" value="2.5">
+            <span class="hint" id="framemmVal">2,5 mm</span>
+          </label>
+          <label>Breedte van het resultaat
+            <input type="range" id="widthmm" min="30" max="400" step="1" value="150">
+            <span class="hint" id="widthVal">150 mm</span>
+          </label>
+        </div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h2>4. Voorbeeld</h2>
+        <div id="stage">
+          <canvas id="preview" hidden></canvas>
+          <p id="previewEmpty">Kies een foto of het voorbeeld om te beginnen.</p>
+        </div>
+        <div class="info" id="info">Afmeting: —</div>
+      </div>
+      <div class="card">
+        <h2>5. Downloaden</h2>
+        <div class="pad">
+          <div class="bar">
+            <button class="btn primary" id="dlsvg" type="button" disabled>⬇️ Kleur-SVG (UV-print)</button>
+            <button class="btn primary" id="dlpng" type="button" disabled>⬇️ PNG</button>
+            <label class="row hint" style="gap:6px">met <select id="dpi"><option>150</option><option selected>300</option><option>600</option></select> dpi</label>
+          </div>
+          <p class="hint" id="pngInfo" style="margin:6px 0 12px"></p>
+          <div class="bar">
+            <button class="btn" id="dllead" type="button" disabled>⬇️ Alleen loodlijnen (SVG)</button>
+            <button class="btn" id="dlout" type="button" disabled>⬇️ Alleen buitenrand (SVG)</button>
+          </div>
+          <label class="fields" style="margin-top:12px"><span style="display:flex;flex-direction:column;gap:4px;font-size:.92rem">Lijndikte in het loodlijnen-bestand
+            <input type="range" id="engrave" min="0.1" max="1" step="0.05" value="0.2">
+            <span class="hint" id="engraveVal">0,2 mm — dun, om te graveren of te snijden</span></span></label>
+          <ul class="help">
+            <li><b>UV-print op de O1 Omni:</b> gebruik de kleur-SVG of de PNG. Controleer in <b>xTool Creative Space</b> of de grootte in mm klopt.</li>
+            <li><b>Graveren of snijden (C1 of O1):</b> gebruik “Alleen loodlijnen”. Elke lijn staat er maar één keer in, zonder vulling.</li>
+            <li>“Alleen buitenrand” is een rode snijlijn rond het raam.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer>
+    Gemaakt met <a href="https://github.com/d3/d3-delaunay">d3-delaunay</a> (ISC-licentie, zie <code>LICENSE-d3-delaunay.txt</code>), lokaal meegeleverd. Voorbeeldfoto: Johannes Vermeer, <i>Meisje met de parel</i> (ca. 1665), publiek domein, via <a href="https://commons.wikimedia.org/wiki/File:Meisje_met_de_parel.jpg">Wikimedia Commons</a>, verkleind voor de demo. Er wordt niets geüpload.
+  </footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
