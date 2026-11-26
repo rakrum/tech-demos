@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Naam-clicker · Tech demo 20</title>
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  } }
+  </script>
+  <style>
+    :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2333; --muted:#5d6577; --accent:#4f6bff; --line:#e3e6ef; --err:#c0392b; }
+    * { box-sizing:border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:1100px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0 0 4px; }
+    h2 { font-size:1.05rem; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .sub { color:var(--muted); margin:0 0 16px; line-height:1.45; }
+    .layout { display:grid; grid-template-columns:minmax(280px,380px) 1fr; gap:16px; align-items:start; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 2px 10px rgba(20,30,60,.05); margin-bottom:16px; }
+    .pad { padding:12px 14px; }
+    .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .fields { display:grid; gap:12px; font-size:.92rem; }
+    .fields label { display:flex; flex-direction:column; gap:4px; }
+    .fields label.off { opacity:.45; }
+    input[type=range] { width:100%; accent-color:var(--accent); }
+    input[type=checkbox] { accent-color:var(--accent); }
+    label.row { flex-direction:row !important; align-items:center; gap:8px; }
+    .hint { color:var(--muted); font-size:.82rem; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:8px 12px; font-size:.95rem; cursor:pointer; }
+    .btn:hover:not(:disabled) { border-color:var(--accent); }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    input[type=file] { display:none; }
+    .seg { display:flex; flex-wrap:wrap; gap:6px; }
+    .seg button { border:1px solid var(--line); background:#fff; padding:7px 11px; font-size:.92rem; cursor:pointer; color:var(--ink); border-radius:10px; }
+    .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .drop { margin:10px 0 0; border:2px dashed var(--line); border-radius:12px; padding:14px; text-align:center; color:var(--muted); font-size:.9rem; }
+    .drop.drag { border-color:var(--accent); background:rgba(79,107,255,.06); color:var(--accent); }
+    .status { font-size:.9rem; color:var(--muted); margin:8px 0 0; min-height:1.2em; line-height:1.45; }
+    .status.err { color:var(--err); }
+    .status.ok b { color:#1e8e4e; }
+    #trace { display:block; width:100%; height:auto; max-height:220px; object-fit:contain; background:#eef0f6; border-radius:8px; margin-top:10px; }
+    .viewer { position:relative; height:min(62vh,540px); background:linear-gradient(#f6f0ff,#e4dcf3); }
+    .viewer canvas { display:block; width:100%; height:100%; touch-action:none; }
+    .viewer .vhint { position:absolute; left:10px; bottom:8px; font-size:.78rem; color:var(--muted); pointer-events:none; }
+    .viewer .busy { position:absolute; right:10px; top:8px; font-size:.8rem; color:var(--muted); display:none; }
+    .viewer .legend { position:absolute; left:10px; top:8px; font-size:.8rem; color:var(--muted); pointer-events:none; }
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:-1px; margin-right:4px; }
+    .info { font-size:.9rem; color:var(--muted); padding:10px 14px; border-top:1px solid var(--line); min-height:1.2em; line-height:1.5; }
+    ul.help { color:var(--muted); font-size:.9rem; padding-left:18px; margin:8px 0 0; line-height:1.45; }
+    footer { margin-top:8px; font-size:.8rem; color:var(--muted); line-height:1.5; }
+    a { color:var(--accent); }
+    @media (max-width:860px) { .layout { grid-template-columns:1fr; } .viewer { height:44vh; min-height:280px; } }
+
+    .colors { display:flex; gap:10px; flex-wrap:wrap; }
+    .colors label { flex-direction:row !important; align-items:center; gap:6px; }
+    input[type=color] { width:34px; height:26px; border:1px solid var(--line); border-radius:6px; padding:0; background:#fff; }
+    input[type=text], select { font-size:1rem; padding:8px 10px; border:1px solid var(--line); border-radius:10px; width:100%; }
+    details summary { cursor:pointer; padding:12px 14px; font-weight:600; }
+    .info { padding:10px 14px; font-size:.9rem; line-height:1.55; border-top:1px solid var(--line); }
+    .info table { border-collapse:collapse; margin-top:6px; }
+    .info td { padding:1px 10px 1px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Naam-clicker</h1>
+  <p class="sub">Maak een <b>naam-clicker</b>: elke letter is een eigen toets op een <b>MX-toetsenbordschakelaar</b>, dus elke letter klikt. Zet de letters in een <b>cirkel</b>, <b>hart</b>, <b>boog</b>, op <b>één</b> of <b>twee regels</b>. Je krijgt een 3MF voor de Snapmaker U1 (voet, toetsen en letters in eigen kleuren) en losse STL's. Alles gebeurt in je eigen browser.</p>
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>1. Naam en vorm</h2>
+        <div class="pad"><div class="fields">
+          <label>Naam
+            <input type="text" id="name" value="Sigviënnely" maxlength="40" autocomplete="off" spellcheck="false">
+            <span class="hint">Spatie = lege plek. Bij <i>twee regels</i> kies je met een <b>/</b> waar de tweede regel begint (bijv. <code>Sigvi/ënnely</code>).</span>
+          </label>
+          <div><div class="hint" style="margin-bottom:4px">Vorm</div><div class="seg" id="layout">
+            <button type="button" data-v="cirkel" class="on">◯ Cirkel</button>
+            <button type="button" data-v="hart">♡ Hart</button>
+            <button type="button" data-v="boog">⌒ Boog</button>
+            <button type="button" data-v="lijn">▭ Eén regel</button>
+            <button type="button" data-v="tweeregels">☰ Twee regels</button>
+            <button type="button" data-v="test">🔧 Passtest</button>
+          </div></div>
+          <div><div class="hint" style="margin-bottom:4px">Letters</div><div class="seg" id="orient">
+            <button type="button" data-v="rechtop" class="on">Allemaal rechtop</button>
+            <button type="button" data-v="meedraaien">Meedraaien (naar buiten)</button>
+          </div></div>
+          <div><div class="hint" style="margin-bottom:4px">Toetsen</div><div class="seg" id="capShape">
+            <button type="button" data-v="auto" class="on">Automatisch</button>
+            <button type="button" data-v="rond">Rond</button>
+            <button type="button" data-v="vierkant">Vierkant</button>
+          </div></div>
+          <label class="row"><input type="checkbox" id="upper"> HOOFDLETTERS</label>
+          <label>Lettertype
+            <select id="font">
+              <option value="LiberationSans-Bold.ttf">Liberation Sans Vet (zoals Arial)</option>
+              <option value="LiberationSerif-Bold.ttf">Liberation Serif Vet (zoals Times)</option>
+              <option value="LiberationMono-Bold.ttf">Liberation Mono Vet (typemachine)</option>
+              <option value="eigen">Eigen lettertype (.ttf of .otf)…</option>
+            </select>
+            <input type="file" id="fontFile" accept=".ttf,.otf,font/ttf,font/otf">
+          </label>
+          <p class="status" id="status">Laden…</p>
+        </div></div>
+      </div>
+      <div class="card">
+        <h2>2. Maten</h2>
+        <div class="pad"><div class="fields">
+          <label>Toetsmaat<input type="range" id="key" min="16" max="22" step="0.5" value="18"><span class="hint" id="keyVal"></span></label>
+          <label>Letterhoogte<input type="range" id="textH" min="6" max="16" step="0.5" value="12"><span class="hint" id="textHVal"></span></label>
+          <label>Ruimte tussen toetsen<input type="range" id="spacing" min="0.5" max="6" step="0.5" value="1.5"><span class="hint" id="spacingVal"></span></label>
+          <label id="arcLabel">Boog: openingshoek<input type="range" id="arc" min="90" max="270" step="5" value="160"><span class="hint" id="arcVal"></span></label>
+          <label>Bodemdikte voet<input type="range" id="floor" min="1" max="4" step="0.2" value="1.6"><span class="hint" id="floorVal"></span></label>
+          <label>Rand rond de toetsen<input type="range" id="rim" min="1.5" max="6" step="0.5" value="2.5"><span class="hint" id="rimVal"></span></label>
+        </div></div>
+      </div>
+      <div class="card">
+        <h2>3. Extra's</h2>
+        <div class="pad"><div class="fields">
+          <label class="row"><input type="checkbox" id="loop" checked> Sleutelhanger-oogje</label>
+          <label class="row" id="fillLabel"><input type="checkbox" id="fill" checked> Dichte middenplaat (cirkel en hart)</label>
+          <label class="row" id="centerLabel"><input type="checkbox" id="centerKey" checked> Hartjestoets in het midden (extra schakelaar)</label>
+          <label class="row"><input type="checkbox" id="pushHole" checked> Uitdrukgaatje onder elke schakelaar</label>
+          <div><div class="hint" style="margin-bottom:4px">Letters op de toets</div><div class="seg" id="label">
+            <button type="button" data-v="verzonken" class="on">In eigen kleur (vlak)</button>
+            <button type="button" data-v="gegraveerd">Gegraveerd</button>
+          </div></div>
+          <div><div class="hint" style="margin-bottom:4px">Toetskleuren</div><div class="seg" id="colors">
+            <button type="button" data-v="gelijk" class="on">Allemaal gelijk</button>
+            <button type="button" data-v="omenom">Om en om</button>
+          </div></div>
+          <div class="colors">
+            <label><input type="color" id="c1" value="#ffffff"> T1 voet</label>
+            <label><input type="color" id="c2" value="#f4a6c9"> T2 toets</label>
+            <label><input type="color" id="c3" value="#7b2d8e"> T3 letter</label>
+            <label><input type="color" id="c4" value="#8fd3f4"> T4 toets 2</label>
+          </div>
+        </div></div>
+      </div>
+      <div class="card">
+        <details>
+          <summary>4. Schakelaar en speling (alleen als het niet past)</summary>
+          <div class="pad"><div class="fields">
+            <label>Schakelaar<select id="sw"><option value="mx">MX-stijl (Cherry, Gateron, Outemu, Kailh Box, Akko; 3- of 5-pins)</option></select></label>
+            <label>Plaatgat<input type="range" id="cut" min="13.6" max="14.4" step="0.05" value="14"><span class="hint" id="cutVal"></span></label>
+            <label>Plaatdikte (waar de klemmetjes onder haken)<input type="range" id="plateT" min="1.2" max="2" step="0.1" value="1.5"><span class="hint" id="plateTVal"></span></label>
+            <label>Extra speling plaatgat<input type="range" id="holeTol" min="0" max="0.4" step="0.05" value="0.1"><span class="hint" id="holeTolVal"></span></label>
+            <label>Extra speling kruisje in de toets<input type="range" id="stemTol" min="0" max="0.4" step="0.05" value="0.15"><span class="hint" id="stemTolVal"></span></label>
+            <p class="hint">Zit de toets te los: speling kruisje omlaag. Te strak of barst hij: omhoog. Print eerst de <b>Passtest</b> (1 vakje + 1 toets).</p>
+          </div></div>
+        </details>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h2>5. Voorbeeld in 3D</h2>
+        <div class="pad" style="padding-bottom:0"><div class="seg" id="view">
+          <button type="button" data-v="samen" class="on">In elkaar</button>
+          <button type="button" data-v="plaat">Zo ligt het op het printbed</button>
+        </div></div>
+        <div class="viewer" id="viewer" style="margin-top:10px">
+          <span class="busy" id="busy">rekenen…</span>
+          <span class="vhint">Draai met je vinger of muis · knijp of scroll om te zoomen</span>
+        </div>
+        <div class="info" id="info">—</div>
+      </div>
+      <div class="card">
+        <h2>6. Downloaden</h2>
+        <div class="pad">
+          <div class="bar">
+            <button class="btn primary" id="dl3mf" type="button" disabled>⬇ 3MF voor de U1 (alles, in kleur)</button>
+            <button class="btn" id="dlBase" type="button" disabled>STL voet</button>
+            <button class="btn" id="dlCaps" type="button" disabled>STL toetsen</button>
+            <button class="btn" id="dlLetters" type="button" disabled>STL letters</button>
+          </div>
+          <ul class="hint" style="line-height:1.55; padding-left:18px">
+            <li>In de 3MF is de <b>voet</b> een object op kop 1. Elke <b>toets</b> is een eigen object met twee delen: toets (kop 2, of om en om 2 en 4) en letter (kop 3).</li>
+            <li>De toetsen liggen <b>ondersteboven</b>: de letter ligt op het bed. Zo wordt de bovenkant glad en is er <b>geen support</b> nodig.</li>
+            <li><b>PLA</b>, laagdikte <b>0,2 mm</b> (de eerste 3 lagen zijn de letter), 3 wanden, 15 % vulling.</li>
+            <li>Nodig: per letter 1 <b>MX-schakelaar</b> (bijv. blauwe = klikkend). Druk de schakelaar van boven in het vakje tot hij klikt, en druk dan de toets erop.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer>
+    Eigen ontwerp. Idee: de <a href="https://makerworld.com/en/models/2953074">Parametric Name Clicker Generator</a> van WunschStück3D op MakerWorld (Standard Digital File License: er is niets van overgenomen, alleen het idee van één toets per letter op een MX-schakelaar). Lettertypes: Liberation (SIL Open Font License, zie <code>fonts/LICENSE-Liberation-fonts.txt</code>). 3D met <a href="https://github.com/elalish/manifold">Manifold</a> (Apache-2.0), letters met <a href="https://opentype.js.org">opentype.js</a> (MIT) en beeld met <a href="https://threejs.org">three.js</a> (MIT), geladen via jsDelivr. Er wordt niets geüpload.
+  </footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
