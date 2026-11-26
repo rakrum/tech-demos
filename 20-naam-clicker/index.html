@@ -120,7 +120,7 @@
       <div class="card">
         <h2>2. Maten</h2>
         <div class="pad"><div class="fields">
-          <label>Toetsmaat<input type="range" id="key" min="18.5" max="28" step="0.5" value="23"><span class="hint" id="keyVal"></span></label>
+          <label>Toetsmaat<input type="range" id="key" min="18.5" max="34" step="0.5" value="27.5"><span class="hint" id="keyVal"></span></label>
           <label>Letterhoogte<input type="range" id="textH" min="6" max="16" step="0.5" value="12"><span class="hint" id="textHVal"></span></label>
           <label>Ruimte tussen toetsen<input type="range" id="spacing" min="0.5" max="6" step="0.5" value="1"><span class="hint" id="spacingVal"></span></label>
           <label id="arcLabel">Boog: openingshoek<input type="range" id="arc" min="90" max="270" step="5" value="160"><span class="hint" id="arcVal"></span></label>
@@ -136,6 +136,7 @@
           <label class="row" id="fillLabel"><input type="checkbox" id="fill" checked> Verdiepte middenplaat (cirkel en hart)</label>
           <label class="row" id="centerLabel"><input type="checkbox" id="centerKey" checked> Hartjestoets in het midden (extra schakelaar)</label>
           <label class="row" id="standLabel"><input type="checkbox" id="stand" checked> Regenboog: losse standaard om rechtop te zetten</label>
+          <label class="row"><input type="checkbox" id="collar" checked> Switch verbergen (kraag): een rand om elke schakelaar, de toets valt eroverheen</label>
           <label class="row"><input type="checkbox" id="pushHole"> Uitdrukgaatje onder elke schakelaar (onderkant niet meer dicht)</label>
           <div><div class="hint" style="margin-bottom:4px">Letters op de toets</div><div class="seg" id="label">
             <button type="button" data-v="verzonken" class="on">In eigen kleur (vlak)</button>
@@ -173,6 +174,7 @@
         <div class="pad" style="padding-bottom:0"><div class="seg" id="view">
           <button type="button" data-v="samen" class="on">In elkaar</button>
           <button type="button" data-v="onder">Onderkant</button>
+          <button type="button" data-v="druk">Ingedrukt</button>
           <button type="button" data-v="toets">Eén toets</button>
           <button type="button" data-v="plaat">Printbed</button>
         </div></div>
@@ -193,7 +195,8 @@
           </div>
           <ul class="hint" style="line-height:1.55; padding-left:18px">
             <li>In de 3MF is de <b>voet</b> een object op kop 1. Elke <b>toets</b> is een eigen object met twee delen: toets (kop 2, of om en om 2 en 4) en letter (kop 3).</li>
-            <li>De toetsen staan <b>met het steeltje omlaag</b> op het bed; de bolle bovenkant met de letter wordt als laatste geprint. Binnenin zit een kort bruggetje (±5 mm): <b>geen support</b> nodig.</li>
+            <li>De toetsen staan <b>met het steeltje omlaag</b> op het bed; de bolle bovenkant met de letter wordt als laatste geprint. Binnenin lopen alle plafonds spits toe (holte 45°, kruisgaatje 60°). In de 3MF staat support per onderdeel al uit; controleer in Orca dat <b>Support inschakelen</b> uit staat, anders komt er support in het kruisgaatje.</li>
+            <li>Met <b>Switch verbergen (kraag)</b> valt de rok van de toets over een rand om de schakelaar. Wil je schakelaars later wisselen, zet dan de uitdrukgaatjes aan: met de kraag past een schakelaartrekker er niet meer langs.</li>
             <li><b>PLA</b>, laagdikte <b>0,2 mm</b> (de bovenste 3 lagen zijn de letter), 3 wanden, 15 % vulling.</li>
             <li>Nodig: per letter 1 <b>MX-schakelaar</b> (bijv. blauwe = klikkend). Druk de schakelaar van boven in het vakje tot hij klikt, en druk dan de toets erop.</li>
           </ul>

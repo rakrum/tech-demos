@@ -22,6 +22,8 @@ export const DEFAULTS = {
   loop: true,
   stand: true,          // regenboog: losse standaard
   pushHole: false,
+  collar: true,         // 'Switch verbergen (kraag)': rand om elke schakelaar, de rok van de toets valt eroverheen
+  press: 0,             // alleen voor het 3D-beeld: 0 = in rust, 1 = helemaal ingedrukt
   label: 'verzonken',   // verzonken | gegraveerd
   inlay: 0.6,
   colors: 'gelijk',
@@ -30,6 +32,16 @@ export const DEFAULTS = {
 
 // MX-maten (Cherry): onderkant huis 5,0 mm onder plaat-bovenkant, pinnen 3,3 mm daaronder;
 // bovenhuis 6,6 mm boven de plaat (voet ca. 14,6 mm breed), steeltop 10,2 mm, slag 4 mm.
+// kraag en rok: maten rond het schakelaarhuis (MX-bovenhuis 15,6 × 15,6 mm)
+export const COLLAR = { hous: 15.6, housR: 1.0, clr: 0.35, wall: 1.2, skirtClr: 0.45, skirtWall: 1.0, taper: 0.3, overlap: 1.2, chamfer: 0.3, topClr: 1.2 };   // topClr: ruimte boven de kraag bij helemaal ingedrukt (ruim, want de echte rusthoogte van de toets verschilt per merk)
+// toetsmaat: standaard en minimum, per vorm van de toets en met of zonder kraag
+export function keySizes(round, collar) {
+  if (!collar) return round ? { def: 23, min: 22.4 } : { def: 19, min: 18.6 };
+  const C = COLLAR; const inHalf = C.hous / 2 + C.clr;
+  const collarOut = round ? (inHalf - C.housR - C.clr) * Math.SQRT2 + C.housR + C.clr + 1.0 : inHalf + C.wall;
+  const min = Math.ceil(2 * (collarOut + C.skirtClr + C.skirtWall + C.taper) * 10) / 10;
+  return { def: Math.ceil(min * 2) / 2, min };
+}
 export const SWITCHES = {
   mx: { name: 'MX (Cherry, Gateron, Outemu, Kailh Box, Akko)', below: 8.6, housTop: 6.6, stemTop: 10.2, travel: 4.0, cavity: 15.0 },
 };
@@ -213,11 +225,11 @@ export function filletPrism(W, cs0, h, f, T, steps = 8) {
 
 // ---------- toetsen ----------
 // Geprint met de steel naar beneden (rok en steel staan op het bed), de bolle of holle bovenkant komt
-// er als laatste op. Het plafond binnenin is een korte brug (±5 mm) tussen steel en rok; geen support nodig.
-function capSolid(W, o, round, style, ceil, T) {
+// er als laatste op. Alle plafonds binnenin (holte en kruisgat) lopen spits onder 45° toe: geen support nodig.
+function capSolid(W, o, round, style, ceil, T, minTop = 0) {
   const { Manifold } = W;
   const R = o.key / 2; const fr = Math.min(1.6, R * 0.15); const taper = 0.3;
-  const thick = style === 'schaal' ? 2.4 : 1.6; const zE = ceil + thick; const hd = style === 'bol' ? 1.1 : style === 'vierkant' ? 0.5 : 0;
+  const dish = style === 'schaal' ? 0.9 : 0; const thick = Math.max(style === 'schaal' ? 2.4 : 1.6, minTop + dish - ceil); const zE = ceil + thick; const hd = style === 'bol' ? 1.1 : style === 'vierkant' ? 0.5 : 0;
   const pts = [];
   const ring = (delta, z) => {
     if (round) { const r = R - delta; const n = Math.max(24, Math.round(segs(r) * 1.5)); for (let i = 0; i < n; i++) { const a = i / n * 2 * Math.PI; pts.push([r * Math.cos(a), r * Math.sin(a), z]); } }
@@ -230,7 +242,7 @@ function capSolid(W, o, round, style, ceil, T) {
   if (hd > 0) { for (let i = 1; i <= 10; i++) { const d = fr + (R - fr - 2.5) * i / 10; ring(d, zE + lift(d)); } pts.push([0, 0, zE + hd]); }
   let outer = T(Manifold.hull(pts));
   if (style === 'schaal') {
-    const a = R - fr - 0.6, dd = 0.9; const Rs = (a * a + dd * dd) / (2 * dd);
+    const a = R - fr - 0.6, dd = dish; const Rs = (a * a + dd * dd) / (2 * dd);
     outer = T(outer.subtract(T(T(Manifold.sphere(Rs, 256)).translate([0, 0, zE - dd + Rs]))));
   }
   return { outer, zTop: zE + hd };
@@ -253,8 +265,8 @@ export function buildClicker(W, font, opts = {}) {
     const style = o.capStyle === 'auto' ? (LD.round ? 'bol' : 'vierkant') : o.capStyle;
     const round = style !== 'vierkant';
     // rok moet rond het schakelaarhuis passen (vak in de toets 16 × 16 mm)
-    const minKey = round ? 22.4 : 18.6;
-    if (!o.key) o.key = round ? 23 : 19;
+    const ks0 = keySizes(round, o.collar); const minKey = ks0.min;
+    if (!o.key) o.key = ks0.def;
     if (o.key < minKey) { warn.push(`Toetsmaat verhoogd naar ${String(minKey).replace('.', ',')} mm, anders past de rok niet om de schakelaar.`); o.key = minKey; }
     const isCenterLayout = ['cirkel', 'hart', 'ster', 'wolk', 'bloem'].includes(o.layout);
 
@@ -343,7 +355,8 @@ export function buildClicker(W, font, opts = {}) {
     if (o.loop && L !== 'test' && !(L === 'regenboog' && o.stand)) {
       let P, dir;
       if (lay.closed) { const gq = lay.gap(scale); P = gq.pos; dir = gq.dir; }
-      else { const f = slots[0]; const s2 = slots[1] || { x: f.x + 1, y: f.y }; const d = [f.x - s2.x, f.y - s2.y]; const l = Math.hypot(d[0], d[1]) || 1; dir = [d[0] / l, d[1] / l]; P = [f.x, f.y]; if (L === 'tweeregels') dir = [-1, 0]; }
+      else { const f = slots[0]; const s2 = slots[1] || { x: f.x + 1, y: f.y }; const d = [f.x - s2.x, f.y - s2.y]; const l = Math.hypot(d[0], d[1]) || 1; dir = [d[0] / l, d[1] / l]; P = [f.x, f.y]; if (L === 'tweeregels') dir = [-1, 0];
+        if (L === 'lijn') { const span = Math.abs(slots[slots.length - 1].x - f.x) + FW; if (span + 22 > 266) dir = [0, 1]; } }   // lange regel: oogje boven de eerste letter, anders past hij niet op het bed
       const body = T(CrossSection.union(parts));
       let ok = false;
       for (let off = FW / 2 + bandOuterExtra + 2; off <= FW / 2 + bandOuterExtra + 40 && !ok; off += 0.5) {
@@ -381,6 +394,22 @@ export function buildClicker(W, font, opts = {}) {
     if (tabHole) holes.push(T(T(tabHole.extrude(baseH + 2)).translate([0, 0, -1])));
     base = T(base.subtract(T(Manifold.union(holes))));
 
+    // kraag: per schakelaar een rand die tot net boven de onderkant van de toetsrok komt (verbergt de schakelaar)
+    const C = COLLAR; const collarH = sw.housTop + C.overlap + C.chamfer;   // 8,1 mm boven de voet; de rok overlapt 1,2 mm in rust en 5,2 mm ingedrukt
+    let collarIn = null, collarOutCS = null, skirtIn = null, colOne = null;
+    if (o.collar) {
+      const inS = C.hous + 2 * C.clr, inR = C.housR + C.clr;
+      collarIn = T(rsq(W, inS, inR));
+      if (round) { const Rin = (inS / 2 - inR) * Math.SQRT2 + inR; collarOutCS = T(circ(W, Rin + 1.0)); skirtIn = T(circ(W, Rin + 1.0 + C.skirtClr)); }
+      else { collarOutCS = T(rsq(W, inS + 2 * C.wall, inR + C.wall)); skirtIn = T(rsq(W, inS + 2 * C.wall + 2 * C.skirtClr, inR + C.wall + C.skirtClr)); }
+      const topCS = T(collarOutCS.offset(-C.chamfer, 'Round', 2, SEG));
+      const col = T(T(T(T(collarOutCS.extrude(collarH - C.chamfer + 0.01)).translate([0, 0, baseH - 0.01]))
+        .add(T(Manifold.hull([T(T(collarOutCS.extrude(0.01)).translate([0, 0, baseH + collarH - C.chamfer - 0.01])), T(T(topCS.extrude(0.01)).translate([0, 0, baseH + collarH - 0.01]))]))))
+        .subtract(T(T(collarIn.extrude(collarH + 2)).translate([0, 0, baseH - 1]))));
+      colOne = col;
+      base = T(base.add(T(Manifold.union(allKeys.map((k) => T(T(col.rotate([0, 0, k.rot])).translate([k.x, k.y, 0])))))));
+    }
+
     // krans: hulstblaadjes en besjes op de buitenrand
     let decoLeaves = null, decoBerries = null;
     if (L === 'krans') {
@@ -409,7 +438,7 @@ export function buildClicker(W, font, opts = {}) {
     let standM = null;
     if (L === 'regenboog' && o.stand) {
       const bb0 = base.boundingBox(); const len = bb0.max[0] - bb0.min[0] + 10, depth = 34, hgt = 15, tilt = 12;
-      const blk = filletPrism(W, T(T(rsq(W, 10, 1)).scale([len / 10, depth / 10])), hgt, 2, T);
+      const blk = filletPrism(W, T(T(CrossSection.square([len - 8, depth - 8], true)).offset(4, 'Round', 2, SEG)), hgt, 2, T);
       const slotW = baseH + 0.5, slotD = 10;
       const slot = T(T(T(T(Manifold.cube([len - 8, slotW, slotD + 20], true)).translate([0, 0, (slotD + 20) / 2])).rotate([-tilt, 0, 0])).translate([0, 2, hgt - slotD]));
       standM = T(blk.subtract(slot));
@@ -420,15 +449,55 @@ export function buildClicker(W, font, opts = {}) {
     const stemTopL = sw.stemTop - skirtGap;      // 3,6 mm
     const socketD = Math.min(3.6, stemTopL);
     const ceil = sw.housTop + sw.travel + 0.4 - skirtGap;   // 4,4 mm: plafond vrij van het huis bij indrukken
-    const { outer, zTop } = capSolid(W, o, round, style, ceil, T);
-    const cavS = 16, cavR = 2.5;
-    const cavity = T(T(T(rsq(W, cavS, cavR)).extrude(ceil + 1)).translate([0, 0, -1]));
-    const post = T(Manifold.cylinder(ceil + 0.3, 2.75, 2.75, 64));
+    // holte onder de toets, helemaal zelfdragend bij printen met de steel omlaag:
+    // rechte rok tot cavZ, daarboven loopt het plafond onder 45° naar binnen; de steel loopt vanaf flareZ
+    // onder 45° naar buiten. Waar die twee schuine vlakken elkaar raken ontstaat een spitse nok: geen plat plafond.
+    const flareZ = sw.travel + 0.1;   // 4,1 mm: net boven de 4 mm slag
+    const slab = (cs, z0, h) => T(T(cs.extrude(h)).translate([0, 0, z0]));
+    const H = 7.5, HF = 20;   // H: hoogte van de schuine holte-afschuining; HF: steel-uitloop (ruim boven de toets)
+    let cavity, roundCav = false;
+    if (o.collar) {
+      // rok valt over de kraag: plafond boven de kraag moet bij indrukken nog 0,5 mm vrij blijven
+      const cavZ = (collarH - sw.housTop) + sw.travel + C.topClr - (C.skirtClr + C.chamfer);   // 5,95 mm boven de onderkant van de rok
+      roundCav = round;
+      const base0 = slab(skirtIn, -1, cavZ + 1);
+      if (round) { const Rs = skirtIn.bounds().max[0];
+        cavity = T(base0.add(T(Manifold.hull([slab(T(circ(W, Rs)), cavZ - 0.01, 0.01), slab(T(circ(W, Rs - H)), cavZ + H - 0.01, 0.01)])))); }
+      else { const sb = skirtIn.bounds(); const side = sb.max[0] - sb.min[0], rr = C.housR + C.clr + C.wall + C.skirtClr;
+        const offSq = (t) => { const sd = side - 2 * t, r2 = rr - t; return r2 > 0.05 ? T(rsq(W, sd, r2)) : T(CrossSection.square([sd, sd], true)); };
+        cavity = T(base0.add(T(Manifold.hull([slab(offSq(0), cavZ - 0.01, 0.01), slab(offSq(rr), cavZ + rr - 0.01, 0.01), slab(offSq(H), cavZ + H - 0.01, 0.01)])))); }
+    } else {
+      // zonder kraag: vak 16 × 16 mm, plafond vanaf 2,6 mm onder 45° naar binnen
+      const cavS = 16, cavR = 2.5, cavZ = ceil - 1.8;
+      const offSq = (side, r, t) => { const sd = side - 2 * t, rr = r - t; return rr > 0.05 ? T(rsq(W, sd, rr)) : T(CrossSection.square([sd, sd], true)); };
+      cavity = T(T(slab(T(rsq(W, cavS, cavR)), -1, cavZ + 1)).add(T(Manifold.hull([
+        slab(offSq(cavS, cavR, 0), cavZ - 0.01, 0.01), slab(offSq(cavS, cavR, cavR), cavZ + cavR - 0.01, 0.01), slab(offSq(cavS, cavR, 7), cavZ + 7 - 0.01, 0.01)]))));
+    }
+    // steel: Ø5,5, onderrand 0,3 mm afgeschuind (olifantspoot); vanaf flareZ loopt hij onder 45° uit
+    // (kegel bij een ronde holte, vierkante piramide bij een vierkante holte)
+    const postR = 2.75, postFoot = 0.3, pA = 2 * postR / Math.SQRT2 - 0.02;
+    const flare = roundCav ? T(Manifold.cylinder(HF, postR - 0.02, postR - 0.02 + HF, 96).translate([0, 0, flareZ]))
+      : T(Manifold.hull([slab(T(CrossSection.square([pA, pA], true)), flareZ, 0.01), slab(T(CrossSection.square([pA + 2 * HF, pA + 2 * HF], true)), flareZ + HF, 0.01)]));
+    const post = T(T(Manifold.hull([T(Manifold.cylinder(0.01, postR - postFoot, postR - postFoot, 64)), T(T(Manifold.cylinder(flareZ + 0.2 - postFoot, postR, postR, 64)).translate([0, 0, postFoot]))])).add(flare));
+    const voidM = T(cavity.subtract(post));
+    const ridge = voidM.boundingBox().max[2];
+    const { outer, zTop } = capSolid(W, o, round, style, ceil, T, ridge + Math.max(Math.min(o.inlay, 1.2), 0.8) + 0.5);
     const armL = 4.0 + o.stemTol, armW = 1.2 + o.stemTol;
     const crossCS = T(CrossSection.union([T(CrossSection.square([armL, armW], true)), T(CrossSection.square([armW, armL], true))]));
-    const cross = T(T(crossCS.extrude(socketD + 1)).translate([0, 0, -1]));
-    const lead = T(T(T(crossCS.offset(0.25, 'Miter', 2, 8)).extrude(0.25 + 1)).translate([0, 0, -1])); // invoerrandje tegen olifantspoot
-    const capShell = T(T(T(T(outer.subtract(cavity)).add(post)).subtract(cross)).subtract(lead));
+    // kruisgat: volle 3,6 mm diep, met daarboven een 45°-zadeldak per arm (spits plafond, zelfdragend)
+    // kruisgat: volle 3,6 mm diep; daarboven per arm een spits zadeldak onder 60° (ruim boven Orca's 30°-drempel,
+    // ook voor kleine smalle gaatjes) en aan de mond een afschuining van 0,35 mm, ook onder 60°.
+    // Gebouwd als bolle romp van punten: de nok is een echte lijn, dus er is nergens een plat vlakje.
+    const roofA = 60 * Math.PI / 180, rh = (armW / 2) * Math.tan(roofA), ch = 0.35, chH = ch * Math.tan(roofA);
+    const rect = (lx, ly, z) => [[-lx / 2, -ly / 2, z], [lx / 2, -ly / 2, z], [lx / 2, ly / 2, z], [-lx / 2, ly / 2, z]];
+    const arm = (rotZ) => {
+      const box = T(T(Manifold.cube([armL, armW, socketD + 1], true)).translate([0, 0, (socketD + 1) / 2 - 1]));
+      const roof = T(Manifold.hull([...rect(armL, armW, socketD - 0.2), ...rect(armL, armW, socketD), [-armL / 2, 0, socketD + rh], [armL / 2, 0, socketD + rh]]));
+      const mouth = T(Manifold.hull([...rect(armL + 2 * ch, armW + 2 * ch, -1), ...rect(armL + 2 * ch, armW + 2 * ch, 0), ...rect(armL, armW, chH)]));
+      let a = T(T(box.add(roof)).add(mouth)); if (rotZ) a = T(a.rotate([0, 0, rotZ])); return a;
+    };
+    const cross = T(arm(0).add(arm(90)));
+    const capShell = T(T(outer.subtract(voidM)).subtract(cross));
 
     // letters
     const em = 100; const glyphs = new Map(); const missing = [];
@@ -471,10 +540,11 @@ export function buildClicker(W, font, opts = {}) {
     if (thin.length) warn.push('Dunne lijntjes (< 0,5 mm) in: ' + [...new Set(thin)].join(' ') + '. Maak de letters groter.');
 
     // --- in elkaar (3D-beeld) ---
-    const assembled = caps.map((c) => { const pl = (m) => T(T(T(m.rotate([0, 0, c.slot.rot])).translate([c.slot.x, c.slot.y, baseH + skirtGap]))); return { body: pl(c.body), letter: c.letter ? pl(c.letter) : null }; });
+    const pz = -sw.travel * Math.max(0, Math.min(1, o.press || 0));   // alleen voor het beeld: ingedrukt
+    const assembled = caps.map((c) => { const pl = (m) => T(T(T(m.rotate([0, 0, c.slot.rot])).translate([c.slot.x, c.slot.y, baseH + skirtGap + pz]))); return { body: pl(c.body), letter: c.letter ? pl(c.letter) : null }; });
     const swParts = allKeys.map((k) => {
-      const hous = T(Manifold.hull([T(T(T(rsq(W, 14.6, 1)).extrude(1)).translate([0, 0, baseH])), T(T(T(rsq(W, 11.4, 1.5)).extrude(0.5)).translate([0, 0, baseH + sw.housTop - 0.5]))]));
-      const st = T(T(crossCS.extrude(sw.stemTop - sw.housTop)).translate([0, 0, baseH + sw.housTop]));
+      const hous = T(Manifold.hull([T(T(T(rsq(W, COLLAR.hous, COLLAR.housR)).extrude(1.5)).translate([0, 0, baseH])), T(T(T(rsq(W, 11.4, 1.5)).extrude(0.5)).translate([0, 0, baseH + sw.housTop - 0.5]))]));
+      const st = T(T(crossCS.extrude(sw.stemTop - sw.housTop)).translate([0, 0, baseH + sw.housTop + pz]));
       return T(T(T(hous.add(st)).rotate([0, 0, k.rot])).translate([k.x, k.y, 0]));
     });
     const switchesM = T(Manifold.union(swParts));
@@ -487,9 +557,17 @@ export function buildClicker(W, font, opts = {}) {
     let y = -g; let standP = null;
     if (standM) { const sb = standM.boundingBox(); standP = T(standM.translate([-(sb.min[0] + sb.max[0]) / 2, y - sb.max[1], 0])); y -= (sb.max[1] - sb.min[1]) + g; }
     const cell = o.key + g;
-    let cols = Math.max(1, Math.min(Math.floor((bed - 2 * margin + g) / cell), Math.max(Math.floor((bw + g) / cell), Math.ceil(caps.length / 3))));
-    const printed = caps.map((c, i) => { const col = i % cols, row = Math.floor(i / cols); const rowN = Math.min(cols, caps.length - row * cols);
-      const x = (col - (rowN - 1) / 2) * cell, yy = y - o.key / 2 - row * cell; return { body: T(c.body.translate([x, yy, 0])), letter: c.letter ? T(c.letter.translate([x, yy, 0])) : null }; });
+    // A: toetsen in rijen onder de voet; B (als A niet past): toetsen in kolommen rechts naast de voet
+    const placeA = () => { let cols = Math.max(1, Math.min(Math.floor((bed - 2 * margin + g) / cell), Math.max(Math.floor((bw + g) / cell), Math.ceil(caps.length / 3))));
+      return caps.map((c, i) => { const col = i % cols, row = Math.floor(i / cols); const rowN = Math.min(cols, caps.length - row * cols);
+        return [(col - (rowN - 1) / 2) * cell, y - o.key / 2 - row * cell]; }); };
+    const placeB = () => { const x0 = bw / 2 + g + o.key / 2, top = bh - o.key / 2; const rows = Math.max(1, Math.floor((Math.max(bh, bed - 2 * margin) + g) / cell));
+      return caps.map((c, i) => [x0 + Math.floor(i / rows) * cell, top - (i % rows) * cell]); };
+    const span = (pos) => { let a = [1e9, 1e9], b2 = [-1e9, -1e9]; const add = (x0, y0, x1, y1) => { a = [Math.min(a[0], x0), Math.min(a[1], y0)]; b2 = [Math.max(b2[0], x1), Math.max(b2[1], y1)]; };
+      add(-bw / 2, 0, bw / 2, bh); if (standP) { const sb = standP.boundingBox(); add(sb.min[0], sb.min[1], sb.max[0], sb.max[1]); }
+      pos.forEach(([x, yy]) => add(x - o.key / 2, yy - o.key / 2, x + o.key / 2, yy + o.key / 2)); return Math.max(b2[0] - a[0], b2[1] - a[1]); };
+    let pos = placeA(); if (span(pos) > bed - 2) { const pB = placeB(); if (span(pB) < span(pos)) pos = pB; }
+    const printed = caps.map((c, i) => { const [x, yy] = pos[i]; return { body: T(c.body.translate([x, yy, 0])), letter: c.letter ? T(c.letter.translate([x, yy, 0])) : null }; });
     let mn = [1e9, 1e9], mx = [-1e9, -1e9];
     const acc = (m) => { if (!m) return; const b = m.boundingBox(); mn = [Math.min(mn[0], b.min[0]), Math.min(mn[1], b.min[1])]; mx = [Math.max(mx[0], b.max[0]), Math.max(mx[1], b.max[1])]; };
     acc(baseP); acc(standP); printed.forEach((p) => acc(p.body));
@@ -501,7 +579,8 @@ export function buildClicker(W, font, opts = {}) {
 
     // --- meshes + controle ---
     const mesh = (m) => (m ? meshOf(m) : null);
-    const capPreview = { body: mesh(caps[0].body), letter: mesh(caps[0].letter), sw: mesh(T(T(swParts[0].translate([-allKeys[0].x, -allKeys[0].y, -baseH - skirtGap])).rotate([0, 0, -allKeys[0].rot]))) };
+    const capPreview = { body: mesh(caps[0].body), letter: mesh(caps[0].letter), sw: mesh(T(T(swParts[0].translate([-allKeys[0].x, -allKeys[0].y, -baseH - skirtGap])).rotate([0, 0, -allKeys[0].rot]))),
+      collar: colOne ? mesh(T(colOne.translate([0, 0, -baseH - skirtGap]))) : null };
     const out = {
       base: mesh(base), deco: { leaves: mesh(decoLeaves), berries: mesh(decoBerries) }, stand: mesh(standM),
       assembled: assembled.map((a) => ({ body: mesh(a.body), letter: mesh(a.letter) })),
@@ -516,7 +595,7 @@ export function buildClicker(W, font, opts = {}) {
     const box = (m) => { const b = m.boundingBox(); return [b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]]; };
     const info = {
       letters: letters.length, switches: allKeys.length, keycaps: caps.length, center: !!center, style, round,
-      baseSize: box(base), standSize: standM ? box(standM) : null, capSize: [o.key, o.key, zTop], baseH, capH: zTop, assembledH: baseH + skirtGap + zTop,
+      baseSize: box(base), standSize: standM ? box(standM) : null, capSize: [o.key, o.key, zTop], baseH, capH: zTop, assembledH: baseH + skirtGap + zTop, collar: !!o.collar, collarH: o.collar ? collarH : 0,
       fitsBed, fitsBase, layout: o.layout, scale, textMM: s * (yMax - yMin), fill: fillInfo, tab: !!tab,
       volumes: vol, grams: { base: vol.base / 1000 * 1.24, caps: vol.caps / 1000 * 1.24, letters: vol.letters / 1000 * 1.24 },
       ok: checks.every((c) => c.ok) && one(base) && (!standM || one(standM)) && caps.every((c) => one(c.body)),
@@ -618,7 +697,11 @@ ${objs.join('\n')}
 <build>${items.join('')}</build>
 </model>`;
   const ms = ['<?xml version="1.0" encoding="UTF-8"?>\n<config>'];
+  // per object support UIT (Orca/Bambu-sleutels): ook als support in het procesprofiel aan staat, krijgen
+  // voet, standaard en toetsen geen support. Niets in dit ontwerp heeft support nodig.
+  const noSup = ['enable_support', '0'], supKeys = [noSup, ['support_type', 'normal(manual)'], ['support_on_build_plate_only', '1'], ['enforce_support_layers', '0']];
   for (const c of cfg) ms.push(` <object id="${c.oid}">\n  <metadata key="name" value="${esc(c.nm)}"/>\n  <metadata key="extruder" value="${c.ex}"/>\n` +
+    supKeys.map(([k, v]) => `  <metadata key="${k}" value="${v}"/>\n`).join('') +
     c.parts.map((p) => `  <part id="${p.pid}" subtype="normal_part">\n   <metadata key="name" value="${esc(p.nm)}"/>\n   <metadata key="extruder" value="${p.ex}"/>\n  </part>`).join('\n') + '\n </object>');
   ms.push(' <plate>\n  <metadata key="plater_id" value="1"/>\n  <metadata key="plater_name" value="Naam-clicker"/>');
   for (const c of cfg) ms.push(`  <model_instance>\n   <metadata key="object_id" value="${c.oid}"/>\n   <metadata key="instance_id" value="0"/>\n  </model_instance>`);

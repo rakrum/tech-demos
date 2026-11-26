@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import ManifoldModule from 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
 import opentype from 'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.module.js';
-import { DEFAULTS, buildClicker, toSTL, to3MF } from './geometry.js';
+import { DEFAULTS, buildClicker, toSTL, to3MF, keySizes } from './geometry.js';
 
 const $ = (id) => document.getElementById(id);
 const nl = (x, d = 1) => Number(x).toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: d });
@@ -25,17 +25,18 @@ for (const g of ['layout', 'orient', 'capStyle', 'label', 'colors', 'view']) {
       ['c1', 'c2', 'c3', 'c4'].forEach((id, i) => { $(id).value = cols[i]; mats[i].color.set(cols[i]); });
     }
     if (g === 'layout' || g === 'capStyle') { // toetsmaat passend bij ronde of vierkante toetsen
-      const want = isRound() ? 23 : 19; if (state.lastRound !== isRound()) { $('key').value = want; $('key').dispatchEvent(new Event('input')); } state.lastRound = isRound();
+      const want = keySizes(isRound(), $('collar').checked).def; if (state.lastRound !== isRound()) { $('key').value = want; $('key').dispatchEvent(new Event('input')); } state.lastRound = isRound();
     }
-    syncOff(); if (g === 'view') show(result, true); else if (g === 'colors') { show(result); } else schedule();
+    syncOff(); if (g === 'view') { if ((state.view === 'druk' ? 1 : 0) !== ((result && result.opts && result.opts.press) || 0)) schedule(); else show(result, true); } else if (g === 'colors') { show(result); } else schedule();
   });
 }
 const mm = (v) => nl(v, 2) + ' mm';
 state.lastRound = true;
-const sliders = { fillet: mm, key: (v) => mm(v) + (isRound() ? ' doorsnede (minimaal 22,4)' : ' breed (minimaal 18,6)'), textH: (v) => mm(v) + ' van de hoogste tot de laagste letterpunt', spacing: mm, arc: (v) => nl(v, 0) + '°', floor: mm, rim: mm,
+const sliders = { fillet: mm, key: (v) => mm(v) + (isRound() ? ' doorsnede' : ' breed') + ' (minimaal ' + nl(keySizes(isRound(), $('collar').checked).min, 1) + ')', textH: (v) => mm(v) + ' van de hoogste tot de laagste letterpunt', spacing: mm, arc: (v) => nl(v, 0) + '°', floor: mm, rim: mm,
   cut: (v) => mm(v) + ' (standaard 14)', plateT: (v) => mm(v) + ' (standaard 1,5)', holeTol: mm, stemTol: mm };
 for (const [id, fmt] of Object.entries(sliders)) { const upd = () => { $(id + 'Val').textContent = fmt(+$(id).value); }; upd(); $(id).addEventListener('input', () => { upd(); schedule(); }); }
 for (const id of ['upper', 'loop', 'fill', 'centerKey', 'pushHole', 'stand']) $(id).addEventListener('change', () => { syncOff(); schedule(); });
+$('collar').addEventListener('change', () => { $('key').value = keySizes(isRound(), $('collar').checked).def; $('key').dispatchEvent(new Event('input')); });
 $('name').addEventListener('input', schedule);
 for (const id of ['c1', 'c2', 'c3', 'c4']) $(id).addEventListener('input', () => { mats[+id[1] - 1].color.set($(id).value); });
 function syncOff() {
@@ -98,10 +99,10 @@ function show(r, refit = false) {
   for (const m of meshes) { group.remove(m); m.geometry.dispose(); } meshes = [];
   const alt = state.colors === 'omenom';
   const add = (m, mat) => { if (m) meshes.push(new THREE.Mesh(geomFrom(m), mat)); };
-  if (state.view === 'samen' || state.view === 'onder') {
+  if (state.view === 'samen' || state.view === 'onder' || state.view === 'druk') {
     add(r.base, mats[0]); add(r.deco.leaves, mats[3]); add(r.deco.berries, mats[1]); add(r.switches, matSw); r.assembled.forEach((a, i) => { add(a.body, mats[alt && i % 2 ? 3 : 1]); add(a.letter, mats[2]); });
   } else if (state.view === 'toets') {
-    add(r.capPreview.body, mats[1]); add(r.capPreview.letter, mats[2]); add(r.capPreview.sw, matSw);
+    add(r.capPreview.body, mats[1]); add(r.capPreview.letter, mats[2]); add(r.capPreview.sw, matSw); add(r.capPreview.collar, mats[0]);
   } else {
     add(r.plate.base, mats[0]); add(r.plate.leaves, mats[3]); add(r.plate.berries, mats[1]); add(r.plate.stand, mats[0]); r.plate.caps.forEach((a, i) => { add(a.body, mats[alt && i % 2 ? 3 : 1]); add(a.letter, mats[2]); });
   }
@@ -120,7 +121,8 @@ function show(r, refit = false) {
 function opts() {
   const o = { name: $('name').value, layout: state.layout, orient: state.orient, capStyle: state.capStyle, label: state.label, colors: state.colors, upper: $('upper').checked };
   for (const k of ['key', 'textH', 'spacing', 'arc', 'floor', 'rim', 'fillet', 'cut', 'plateT', 'holeTol', 'stemTol']) o[k] = +$(k).value;
-  for (const k of ['loop', 'fill', 'centerKey', 'pushHole', 'stand']) o[k] = $(k).checked;
+  for (const k of ['loop', 'fill', 'centerKey', 'pushHole', 'stand', 'collar']) o[k] = $(k).checked;
+  o.press = state.view === 'druk' ? 1 : 0;
   o.sw = $('sw').value; if (o.layout === 'test') { o.loop = false; }
   return o;
 }
@@ -167,6 +169,12 @@ function download(bytes, name, type) {
 const colorsNow = () => ['c1', 'c2', 'c3', 'c4'].map((id) => $(id).value.toUpperCase());
 cc.threemf = () => to3MF(result, fileBase(), colorsNow());
 cc.stl = (what) => toSTL(what === 'base' ? [result.plate.base, result.plate.stand, result.plate.leaves, result.plate.berries] : result.plate.caps.map((c) => (what === 'caps' ? c.body : c.letter)), fileBase());
+cc.side = (elev = 4) => { // voor tests: camera laag van opzij
+  const box = new THREE.Box3().setFromObject(group); const c = box.getCenter(new THREE.Vector3()); const sz = box.getSize(new THREE.Vector3());
+  const d = Math.max(sz.x, sz.y * 2.2) * 1.25; const e = elev * Math.PI / 180;
+  controls.target.copy(c); camera.position.set(c.x, c.y + d * Math.sin(e), c.z + d * Math.cos(e)); camera.near = d / 50; camera.far = d * 20; camera.updateProjectionMatrix(); controls.update();
+};
+cc.setChecks = (o) => { for (const [k, v] of Object.entries(o)) { $(k).checked = v; $(k).dispatchEvent(new Event('change')); } schedule(); };
 cc.set = (o) => { // voor tests: { layout, name, ... }
   if (o.name !== undefined) $('name').value = o.name;
   for (const g of ['layout', 'orient', 'capStyle', 'label', 'colors', 'view']) if (o[g]) $(g).querySelector(`[data-v="${o[g]}"]`).click();

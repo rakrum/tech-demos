@@ -22,8 +22,9 @@ Alles draait in je eigen browser. Er wordt niets geüpload en er zijn geen accou
    - **Passtest**: één vakje met één toets. Print die eerst.
 4. Kies de **toetsvorm**: **rond bol** (een bolle bovenkant), **rond schaal** (een holle bovenkant, zoals een echte toetsenbordtoets) of **vierkant zacht** (vierkant met ronde hoeken). Bij *Automatisch* krijgen de boog, de regenboog en de regels vierkante toetsen en de rest ronde toetsen.
 5. Schuif aan de **maten** in millimeters: toetsmaat, letterhoogte, ruimte tussen de toetsen, bodemdikte, rand en de afronding van de bovenrand.
-6. Onder **Extra's** zet je het oogje, de middenplaat, de hartjestoets, de standaard en de uitdrukgaatjes aan of uit, en kies je de kleuren. De uitdrukgaatjes staan nu standaard **uit**, zodat de onderkant helemaal dicht en glad is.
-7. Bekijk het model met **In elkaar**, **Onderkant**, **Eén toets** of **Printbed**.
+6. Onder **Extra's** zet je het oogje, de middenplaat, de hartjestoets, de standaard en de uitdrukgaatjes aan of uit, en kies je de kleuren. De uitdrukgaatjes staan standaard **uit**, zodat de onderkant helemaal dicht en glad is.
+   - **Switch verbergen (kraag)** staat standaard **aan**. Om elke schakelaar staat dan een rand van 8,1 mm hoog, en de rok van de toets valt daar met 0,45 mm speling overheen. In rust overlappen ze 1,2 mm en ingedrukt 5,2 mm, dus je ziet de schakelaar van opzij nooit. De toetsen worden daardoor wel groter en hoger (zie *Goed om te weten*).
+7. Bekijk het model met **In elkaar**, **Onderkant**, **Ingedrukt**, **Eén toets** of **Printbed**.
 8. Kijk of er **✔ printklaar** staat en download de **3MF (U1)** of de losse STL's.
 
 ## Wat heb je nodig
@@ -37,14 +38,14 @@ Alles draait in je eigen browser. Er wordt niets geüpload en er zijn geen accou
 1. Open de 3MF in **Snapmaker Orca**. Alles ligt al goed op het printbed.
 2. De kleuren staan per kop klaar. **Kop 1** is de voet (en de standaard), **kop 2** de toetsen (en de besjes van de krans), **kop 3** de letters en **kop 4** de tweede toetskleur of de hulst. Zet in Orca het juiste filament op elke kop.
 3. Gebruik **PLA**, een laagdikte van **0,2 mm**, 3 wanden en 15 % vulling. Je hebt **geen support** nodig.
-4. De toetsen staan **met het steeltje omlaag** op het bed. De bolle of holle bovenkant met de letter wordt als laatste geprint, en de letter volgt de bolling. Binnenin zit een kort bruggetje van ongeveer 5 mm. Dat lukt zonder support.
+4. De voet print je rechtop. De kraag is een rechte rand en heeft geen support nodig. De toetsen staan **met het steeltje omlaag** op het bed. De bolle of holle bovenkant met de letter wordt als laatste geprint, en de letter volgt de bolling. Binnenin lopen alle plafonds spits toe: onder 45° in de holte en onder 60° boven het kruisgaatje. In de 3MF staat support per onderdeel al **uit**. Kijk in Orca toch even na of bij *Proces → Support* het vinkje **Support inschakelen** (`enable_support`) uit staat. Staat het aan, dan kan de slicer het kleine kruisgaatje vol support zetten, en dan past de toets niet meer op de schakelaar. *Alleen op het bed* helpt hier niet: het kruisgaatje ligt open op het bed.
 5. Kies in Orca bij **Wanden** de *Arachne*-wandgenerator. Daarmee worden kleine letters en de puntjes op de **ë** mooier.
 
 ## In elkaar zetten
 
 1. Druk elke schakelaar **van boven** in een vakje tot je hem hoort klikken. Hij staat dan vast.
 2. Druk de toets op het kruisje van de schakelaar, met de letter rechtop. Het kruisje past in vier standen.
-3. Moet er een schakelaar uit? Wrik hem met een schakelaartrekker of een plat schroevendraaiertje los. Wil je dat makkelijker hebben, zet dan vóór het printen de **uitdrukgaatjes** aan.
+3. Moet er een schakelaar uit? Met de kraag past er geen schakelaartrekker meer langs. Wil je schakelaars later kunnen wisselen, zet dan vóór het printen de **uitdrukgaatjes** aan. Dan duw je de schakelaar met een pen van onderen eruit.
 4. Regenboog met standaard: schuif de onderkant van de regenboog in de sleuf.
 
 ## Past het niet?
@@ -58,7 +59,9 @@ Open **4. Schakelaar en speling**:
 ## Goed om te weten
 
 - Het model is nog **niet getest op een echte U1**. De maten van de schakelaar komen uit de standaard. Print daarom eerst de passtest.
-- De nieuwe toetsen zijn groter (rond Ø23 mm, vierkant 19 mm), dus de vormen zijn ook wat groter. Een cirkel is ongeveer 12 cm en een ster ongeveer 16 × 20 cm.
+- Met de kraag zijn de toetsen **rond Ø27,5 mm** en **vierkant 22,5 mm**. Ze zijn ongeveer 12,2 mm (rond) of 10,8 mm (vierkant) hoog. De voet is 10,2 mm hoog, met de kraag 18,3 mm. Alles in elkaar is ongeveer 29 mm (rond) of 27,6 mm (vierkant) hoog.
+- De vormen worden daardoor groter. Een cirkel is ongeveer 14 × 15 cm en een ster ongeveer 19 × 23 cm. Bij een ster liggen de toetsen naast de voet op het printbed.
+- Zet je de kraag uit, dan krijg je de kleinere toetsen van eerst terug (rond Ø23, vierkant 19 mm). De schakelaar is dan wel te zien.
 - Het grammengewicht in het overzicht is voor een **massieve** print. Met 15 % vulling is het veel minder.
 - Een heel lange naam wordt groot. De tool waarschuwt als het niet meer op het printbed (270 × 270 mm) past.
 - Je kunt ook je **eigen lettertype** kiezen (.ttf of .otf). Staat er een letter niet in dat lettertype, dan zegt de tool dat.
