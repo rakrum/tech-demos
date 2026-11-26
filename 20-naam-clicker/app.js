@@ -8,33 +8,41 @@ const $ = (id) => document.getElementById(id);
 const nl = (x, d = 1) => Number(x).toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: d });
 const cc = window.__cc = { ready: false, busy: false, info: null, error: null, builds: 0 };
 let wasm = null, result = null, font = null; const fontCache = {};
-const state = { layout: 'cirkel', orient: 'rechtop', capShape: 'auto', label: 'verzonken', colors: 'gelijk', view: 'samen' };
+const state = { layout: 'cirkel', orient: 'auto', capStyle: 'auto', label: 'verzonken', colors: 'gelijk', view: 'samen' };
+const ROUND = ['cirkel', 'hart', 'ster', 'krans', 'wolk', 'bloem'];
+const isRound = () => state.capStyle === 'auto' ? ROUND.includes(state.layout) : state.capStyle !== 'vierkant';
 
 function setStatus(html, cls = '') { const s = $('status'); s.innerHTML = html; s.className = 'status ' + cls; }
 
 // ---------- knoppen ----------
-for (const g of ['layout', 'orient', 'capShape', 'label', 'colors', 'view']) {
+for (const g of ['layout', 'orient', 'capStyle', 'label', 'colors', 'view']) {
   $(g).addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $(g).querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); state[g] = b.dataset.v;
-    if (g === 'layout') { // handige standaard per vorm
-      const o = b.dataset.v === 'boog' ? 'meedraaien' : 'rechtop'; state.orient = o;
-      $('orient').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.v === o));
+    if (g === 'layout' && (b.dataset.v === 'krans') !== !!state.xmas) { // kerstkleuren voor de krans (en weer terug)
+      state.xmas = b.dataset.v === 'krans';
+      const cols = state.xmas ? ['#ffffff', '#d62828', '#ffffff', '#2e8b57'] : ['#ffffff', '#f4a6c9', '#7b2d8e', '#8fd3f4'];
+      ['c1', 'c2', 'c3', 'c4'].forEach((id, i) => { $(id).value = cols[i]; mats[i].color.set(cols[i]); });
+    }
+    if (g === 'layout' || g === 'capStyle') { // toetsmaat passend bij ronde of vierkante toetsen
+      const want = isRound() ? 23 : 19; if (state.lastRound !== isRound()) { $('key').value = want; $('key').dispatchEvent(new Event('input')); } state.lastRound = isRound();
     }
     syncOff(); if (g === 'view') show(result, true); else if (g === 'colors') { show(result); } else schedule();
   });
 }
 const mm = (v) => nl(v, 2) + ' mm';
-const sliders = { key: (v) => mm(v) + ' (MX-afstand is 19 mm)', textH: (v) => mm(v) + ' van de hoogste tot de laagste letterpunt', spacing: mm, arc: (v) => nl(v, 0) + '°', floor: mm, rim: mm,
+state.lastRound = true;
+const sliders = { fillet: mm, key: (v) => mm(v) + (isRound() ? ' doorsnede (minimaal 22,4)' : ' breed (minimaal 18,6)'), textH: (v) => mm(v) + ' van de hoogste tot de laagste letterpunt', spacing: mm, arc: (v) => nl(v, 0) + '°', floor: mm, rim: mm,
   cut: (v) => mm(v) + ' (standaard 14)', plateT: (v) => mm(v) + ' (standaard 1,5)', holeTol: mm, stemTol: mm };
 for (const [id, fmt] of Object.entries(sliders)) { const upd = () => { $(id + 'Val').textContent = fmt(+$(id).value); }; upd(); $(id).addEventListener('input', () => { upd(); schedule(); }); }
-for (const id of ['upper', 'loop', 'fill', 'centerKey', 'pushHole']) $(id).addEventListener('change', () => { syncOff(); schedule(); });
+for (const id of ['upper', 'loop', 'fill', 'centerKey', 'pushHole', 'stand']) $(id).addEventListener('change', () => { syncOff(); schedule(); });
 $('name').addEventListener('input', schedule);
 for (const id of ['c1', 'c2', 'c3', 'c4']) $(id).addEventListener('input', () => { mats[+id[1] - 1].color.set($(id).value); });
 function syncOff() {
-  const closed = state.layout === 'cirkel' || state.layout === 'hart';
-  $('arcLabel').classList.toggle('off', state.layout !== 'boog');
-  $('fillLabel').classList.toggle('off', !closed); $('centerLabel').classList.toggle('off', !closed);
+  const L = state.layout;
+  $('arcLabel').classList.toggle('off', L !== 'boog');
+  $('fillLabel').classList.toggle('off', !['cirkel', 'hart'].includes(L)); $('centerLabel').classList.toggle('off', !['cirkel', 'hart', 'ster', 'wolk', 'bloem'].includes(L));
+  $('standLabel').classList.toggle('off', L !== 'regenboog');
 }
 syncOff();
 
@@ -90,12 +98,15 @@ function show(r, refit = false) {
   for (const m of meshes) { group.remove(m); m.geometry.dispose(); } meshes = [];
   const alt = state.colors === 'omenom';
   const add = (m, mat) => { if (m) meshes.push(new THREE.Mesh(geomFrom(m), mat)); };
-  if (state.view === 'samen') {
-    add(r.base, mats[0]); add(r.switches, matSw); r.assembled.forEach((a, i) => { add(a.body, mats[alt && i % 2 ? 3 : 1]); add(a.letter, mats[2]); });
+  if (state.view === 'samen' || state.view === 'onder') {
+    add(r.base, mats[0]); add(r.deco.leaves, mats[3]); add(r.deco.berries, mats[1]); add(r.switches, matSw); r.assembled.forEach((a, i) => { add(a.body, mats[alt && i % 2 ? 3 : 1]); add(a.letter, mats[2]); });
+  } else if (state.view === 'toets') {
+    add(r.capPreview.body, mats[1]); add(r.capPreview.letter, mats[2]); add(r.capPreview.sw, matSw);
   } else {
-    add(r.plate.base, mats[0]); r.plate.caps.forEach((a, i) => { add(a.body, mats[alt && i % 2 ? 3 : 1]); add(a.letter, mats[2]); });
+    add(r.plate.base, mats[0]); add(r.plate.leaves, mats[3]); add(r.plate.berries, mats[1]); add(r.plate.stand, mats[0]); r.plate.caps.forEach((a, i) => { add(a.body, mats[alt && i % 2 ? 3 : 1]); add(a.letter, mats[2]); });
   }
   group.position.set(0, 0, 0);
+  group.rotation.x = state.view === 'onder' ? Math.PI / 2 : -Math.PI / 2;
   group.add(...meshes);
   if (state.view === 'plaat') { // printbed tonen
     const bed = new THREE.Mesh(new THREE.PlaneGeometry(270, 270), new THREE.MeshBasicMaterial({ color: 0xd9dde8, transparent: true, opacity: 0.7 }));
@@ -107,9 +118,9 @@ function show(r, refit = false) {
 
 // ---------- opbouwen ----------
 function opts() {
-  const o = { name: $('name').value, layout: state.layout, orient: state.orient, capShape: state.capShape, label: state.label, colors: state.colors, upper: $('upper').checked };
-  for (const k of ['key', 'textH', 'spacing', 'arc', 'floor', 'rim', 'cut', 'plateT', 'holeTol', 'stemTol']) o[k] = +$(k).value;
-  for (const k of ['loop', 'fill', 'centerKey', 'pushHole']) o[k] = $(k).checked;
+  const o = { name: $('name').value, layout: state.layout, orient: state.orient, capStyle: state.capStyle, label: state.label, colors: state.colors, upper: $('upper').checked };
+  for (const k of ['key', 'textH', 'spacing', 'arc', 'floor', 'rim', 'fillet', 'cut', 'plateT', 'holeTol', 'stemTol']) o[k] = +$(k).value;
+  for (const k of ['loop', 'fill', 'centerKey', 'pushHole', 'stand']) o[k] = $(k).checked;
   o.sw = $('sw').value; if (o.layout === 'test') { o.loop = false; }
   return o;
 }
@@ -129,7 +140,8 @@ async function rebuild() {
     const g = (v) => nl(v, 0) + ' g';
     $('info').innerHTML = `<b>${i.letters} letters</b> → <b>${i.switches} MX-schakelaars</b> en <b>${i.keycaps} toetsen</b>${i.center ? ' (1 hartjestoets in het midden)' : ''}` +
       `<table><tr><td>Voet</td><td><b>${nl(b[0])} × ${nl(b[1])} × ${nl(b[2])} mm</b></td></tr>` +
-      `<tr><td>Toets</td><td>${i.round ? 'rond Ø' + nl(i.capSize[0]) : nl(i.capSize[0]) + ' × ' + nl(i.capSize[1])} mm, ${nl(i.capSize[2])} mm hoog · letters ${nl(i.textMM)} mm</td></tr>` +
+      (i.standSize ? `<tr><td>Standaard</td><td>${nl(i.standSize[0])} × ${nl(i.standSize[1])} × ${nl(i.standSize[2])} mm</td></tr>` : '') +
+      `<tr><td>Toets</td><td>${{ bol: 'rond bol', schaal: 'rond schaal', vierkant: 'vierkant zacht' }[i.style]}, ${i.round ? 'Ø' + nl(i.capSize[0]) : nl(i.capSize[0]) + ' × ' + nl(i.capSize[1])} mm, ${nl(i.capSize[2])} mm hoog · letters ${nl(i.textMM)} mm</td></tr>` +
       `<tr><td>In elkaar</td><td>${nl(i.assembledH)} mm hoog</td></tr>` +
       `<tr><td>Filament (massief, echt minder)</td><td>voet ${g(i.grams.base)} · toetsen ${g(i.grams.caps)} · letters ${nl(i.grams.letters, 1)} g</td></tr></table>` +
       (i.warn.length ? '<div style="color:#b5651d;margin-top:6px">⚠ ' + i.warn.join('<br>⚠ ') + '</div>' : '');
@@ -154,10 +166,10 @@ function download(bytes, name, type) {
 }
 const colorsNow = () => ['c1', 'c2', 'c3', 'c4'].map((id) => $(id).value.toUpperCase());
 cc.threemf = () => to3MF(result, fileBase(), colorsNow());
-cc.stl = (what) => toSTL(what === 'base' ? [result.plate.base] : result.plate.caps.map((c) => (what === 'caps' ? c.body : c.letter)), fileBase());
+cc.stl = (what) => toSTL(what === 'base' ? [result.plate.base, result.plate.stand, result.plate.leaves, result.plate.berries] : result.plate.caps.map((c) => (what === 'caps' ? c.body : c.letter)), fileBase());
 cc.set = (o) => { // voor tests: { layout, name, ... }
   if (o.name !== undefined) $('name').value = o.name;
-  for (const g of ['layout', 'orient', 'capShape', 'label', 'colors', 'view']) if (o[g]) $(g).querySelector(`[data-v="${o[g]}"]`).click();
+  for (const g of ['layout', 'orient', 'capStyle', 'label', 'colors', 'view']) if (o[g]) $(g).querySelector(`[data-v="${o[g]}"]`).click();
   schedule();
 };
 $('dl3mf').onclick = () => result && download(cc.threemf(), fileBase() + '_U1.3mf', 'model/3mf');

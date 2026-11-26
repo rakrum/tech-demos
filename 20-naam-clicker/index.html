@@ -83,19 +83,26 @@
           <div><div class="hint" style="margin-bottom:4px">Vorm</div><div class="seg" id="layout">
             <button type="button" data-v="cirkel" class="on">◯ Cirkel</button>
             <button type="button" data-v="hart">♡ Hart</button>
+            <button type="button" data-v="ster">☆ Ster</button>
+            <button type="button" data-v="krans">🎄 Kerstkrans</button>
+            <button type="button" data-v="wolk">☁ Wolk</button>
+            <button type="button" data-v="bloem">✿ Bloem</button>
             <button type="button" data-v="boog">⌒ Boog</button>
+            <button type="button" data-v="regenboog">🌈 Regenboog</button>
             <button type="button" data-v="lijn">▭ Eén regel</button>
             <button type="button" data-v="tweeregels">☰ Twee regels</button>
             <button type="button" data-v="test">🔧 Passtest</button>
           </div></div>
           <div><div class="hint" style="margin-bottom:4px">Letters</div><div class="seg" id="orient">
-            <button type="button" data-v="rechtop" class="on">Allemaal rechtop</button>
+            <button type="button" data-v="auto" class="on">Automatisch</button>
+            <button type="button" data-v="rechtop">Allemaal rechtop</button>
             <button type="button" data-v="meedraaien">Meedraaien (naar buiten)</button>
           </div></div>
-          <div><div class="hint" style="margin-bottom:4px">Toetsen</div><div class="seg" id="capShape">
+          <div><div class="hint" style="margin-bottom:4px">Toetsen</div><div class="seg" id="capStyle">
             <button type="button" data-v="auto" class="on">Automatisch</button>
-            <button type="button" data-v="rond">Rond</button>
-            <button type="button" data-v="vierkant">Vierkant</button>
+            <button type="button" data-v="bol">● Rond bol</button>
+            <button type="button" data-v="schaal">◎ Rond schaal</button>
+            <button type="button" data-v="vierkant">▢ Vierkant zacht</button>
           </div></div>
           <label class="row"><input type="checkbox" id="upper"> HOOFDLETTERS</label>
           <label>Lettertype
@@ -113,21 +120,23 @@
       <div class="card">
         <h2>2. Maten</h2>
         <div class="pad"><div class="fields">
-          <label>Toetsmaat<input type="range" id="key" min="16" max="22" step="0.5" value="18"><span class="hint" id="keyVal"></span></label>
+          <label>Toetsmaat<input type="range" id="key" min="18.5" max="28" step="0.5" value="23"><span class="hint" id="keyVal"></span></label>
           <label>Letterhoogte<input type="range" id="textH" min="6" max="16" step="0.5" value="12"><span class="hint" id="textHVal"></span></label>
-          <label>Ruimte tussen toetsen<input type="range" id="spacing" min="0.5" max="6" step="0.5" value="1.5"><span class="hint" id="spacingVal"></span></label>
+          <label>Ruimte tussen toetsen<input type="range" id="spacing" min="0.5" max="6" step="0.5" value="1"><span class="hint" id="spacingVal"></span></label>
           <label id="arcLabel">Boog: openingshoek<input type="range" id="arc" min="90" max="270" step="5" value="160"><span class="hint" id="arcVal"></span></label>
           <label>Bodemdikte voet<input type="range" id="floor" min="1" max="4" step="0.2" value="1.6"><span class="hint" id="floorVal"></span></label>
           <label>Rand rond de toetsen<input type="range" id="rim" min="1.5" max="6" step="0.5" value="2.5"><span class="hint" id="rimVal"></span></label>
+          <label>Afronding bovenrand voet<input type="range" id="fillet" min="0" max="2" step="0.1" value="1.2"><span class="hint" id="filletVal"></span></label>
         </div></div>
       </div>
       <div class="card">
         <h2>3. Extra's</h2>
         <div class="pad"><div class="fields">
           <label class="row"><input type="checkbox" id="loop" checked> Sleutelhanger-oogje</label>
-          <label class="row" id="fillLabel"><input type="checkbox" id="fill" checked> Dichte middenplaat (cirkel en hart)</label>
+          <label class="row" id="fillLabel"><input type="checkbox" id="fill" checked> Verdiepte middenplaat (cirkel en hart)</label>
           <label class="row" id="centerLabel"><input type="checkbox" id="centerKey" checked> Hartjestoets in het midden (extra schakelaar)</label>
-          <label class="row"><input type="checkbox" id="pushHole" checked> Uitdrukgaatje onder elke schakelaar</label>
+          <label class="row" id="standLabel"><input type="checkbox" id="stand" checked> Regenboog: losse standaard om rechtop te zetten</label>
+          <label class="row"><input type="checkbox" id="pushHole"> Uitdrukgaatje onder elke schakelaar (onderkant niet meer dicht)</label>
           <div><div class="hint" style="margin-bottom:4px">Letters op de toets</div><div class="seg" id="label">
             <button type="button" data-v="verzonken" class="on">In eigen kleur (vlak)</button>
             <button type="button" data-v="gegraveerd">Gegraveerd</button>
@@ -140,7 +149,7 @@
             <label><input type="color" id="c1" value="#ffffff"> T1 voet</label>
             <label><input type="color" id="c2" value="#f4a6c9"> T2 toets</label>
             <label><input type="color" id="c3" value="#7b2d8e"> T3 letter</label>
-            <label><input type="color" id="c4" value="#8fd3f4"> T4 toets 2</label>
+            <label><input type="color" id="c4" value="#8fd3f4"> T4 toets 2 / hulst</label>
           </div>
         </div></div>
       </div>
@@ -163,7 +172,9 @@
         <h2>5. Voorbeeld in 3D</h2>
         <div class="pad" style="padding-bottom:0"><div class="seg" id="view">
           <button type="button" data-v="samen" class="on">In elkaar</button>
-          <button type="button" data-v="plaat">Zo ligt het op het printbed</button>
+          <button type="button" data-v="onder">Onderkant</button>
+          <button type="button" data-v="toets">Eén toets</button>
+          <button type="button" data-v="plaat">Printbed</button>
         </div></div>
         <div class="viewer" id="viewer" style="margin-top:10px">
           <span class="busy" id="busy">rekenen…</span>
@@ -182,8 +193,8 @@
           </div>
           <ul class="hint" style="line-height:1.55; padding-left:18px">
             <li>In de 3MF is de <b>voet</b> een object op kop 1. Elke <b>toets</b> is een eigen object met twee delen: toets (kop 2, of om en om 2 en 4) en letter (kop 3).</li>
-            <li>De toetsen liggen <b>ondersteboven</b>: de letter ligt op het bed. Zo wordt de bovenkant glad en is er <b>geen support</b> nodig.</li>
-            <li><b>PLA</b>, laagdikte <b>0,2 mm</b> (de eerste 3 lagen zijn de letter), 3 wanden, 15 % vulling.</li>
+            <li>De toetsen staan <b>met het steeltje omlaag</b> op het bed; de bolle bovenkant met de letter wordt als laatste geprint. Binnenin zit een kort bruggetje (±5 mm): <b>geen support</b> nodig.</li>
+            <li><b>PLA</b>, laagdikte <b>0,2 mm</b> (de bovenste 3 lagen zijn de letter), 3 wanden, 15 % vulling.</li>
             <li>Nodig: per letter 1 <b>MX-schakelaar</b> (bijv. blauwe = klikkend). Druk de schakelaar van boven in het vakje tot hij klikt, en druk dan de toets erop.</li>
           </ul>
         </div>
